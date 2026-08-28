@@ -43,6 +43,7 @@ const E = {
 };
 
 const TICK_MS = 100;
+const DEATH_LOCK_MS = 3000; // 玩家死亡后禁止攻击的时长（随后复活）
 const BADGES = ['Ⅰ','Ⅱ','Ⅲ'];
 const TINTS  = ['', 'hue-rotate(120deg) saturate(1.4)', 'hue-rotate(240deg) saturate(1.4)'];
 // GCD 技能动作表（其余为非 GCD：shield / qi / buff）
@@ -114,6 +115,7 @@ const Battle = {
     if($('kill-burst')) $('kill-burst').classList.remove('go');
     const dl = $('drop-layer'); if(dl) dl.innerHTML = '';
     if($('overlay')) $('overlay').classList.remove('show');
+    this.hideDeathOverlay();
 
     $('boss-name').textContent = E.data.name;
     const blv = $('bossLv'); if(blv) blv.textContent = E.data.isBoss ? '首领' : '小怪';
@@ -581,18 +583,78 @@ const Battle = {
   },
 
   onDeath(){
+    // 玩家被击败：立即停止一切战斗逻辑并锁定输入（active=false → 技能与 tick 战斗判定全部失效）
+    this.active = false;
     this.stopEnemyAttack();
-    this.announceDeath();
-    P.hp = P.maxHp;   // 回满继续刷
-    this.respawnSoon();
+    this.setAuto(false);
+    P.casting = null;
+    this.hideCastBar();
+    if(E.data){ E.casting = false; E.castEndAt = 0; }
+    const es = $('enemy-sprite'); if(es) es.classList.remove('casting');
+    this.showDeathOverlay();
+    this._respawnTimer && clearTimeout(this._respawnTimer);
+    const self = this;
+    this._respawnTimer = setTimeout(()=>self.revive(), DEATH_LOCK_MS);
     this.renderHp();
   },
 
-  announceDeath(){
-    const b = $('banner'); if(!b) return;
-    b.innerHTML = '<div class="b-t b-title-msg">☠ 你被 '+E.data.name+' 击败</div>';
-    b.classList.add('show');
-    clearTimeout(b._t); b._t = setTimeout(()=>b.classList.remove('show'), 2600);
+  // 死亡遮罩：提示被谁击败 + 倒计时（期间 active=false，禁止一切攻击）
+  showDeathOverlay(){
+    const ov = $('death-overlay');
+    if(!ov){
+      this.logPush('<span class="dmg-ene">☠ 你被 '+E.data.name+' 击败，即将复活…</span>');
+      return;
+    }
+    const by = $('deathBy'); if(by) by.textContent = '被 '+E.data.name+' 击败';
+    ov.classList.add('show');
+    this._deathReviveAt = Date.now() + DEATH_LOCK_MS;
+    this._deathCountTimer && clearInterval(this._deathCountTimer);
+    const upd = ()=>{
+      const remain = Math.max(0, Math.ceil((this._deathReviveAt - Date.now())/1000));
+      const el = $('deathCount');
+      if(el) el.textContent = remain>0 ? remain+' 秒后复活' : '复活中…';
+    };
+    upd();
+    this._deathCountTimer = setInterval(upd.bind(this), 200);
+  },
+  hideDeathOverlay(){
+    const ov = $('death-overlay'); if(ov) ov.classList.remove('show');
+    this._deathCountTimer && clearInterval(this._deathCountTimer);
+    this._deathCountTimer = null;
+  },
+
+  // 玩家复活：重置技能状态与敌人状态，重新开战
+  revive(){
+    this.hideDeathOverlay();
+    if(!E.data) return;
+    // --- 重置玩家战斗状态（连段/印记/剑气/buff/咏唱全清，HP 回满）---
+    P.hp = P.maxHp;
+    P.buf = ''; P.bufUntil = 0;
+    P.stage[1] = 0; P.stage[2] = 0;
+    P.seals = { snow:false, moon:false, hana:false };
+    P.gcdUntil = 0; P.gcdTotal = 1;
+    P.shieldUntil = 0; P.shieldCdUntil = 0;
+    P.qi = 0;
+    P.pressLockUntil = Date.now() + PRESS_LOCK_MS;
+    P.buffUntil = 0;
+    P.ultFollowReady = false;
+    P.qiCdUntil = 0; P.qiCdTotal = 1;
+    P.buffCdUntil = 0; P.buffCdTotal = 1;
+    P.casting = null;
+    P.chiUntil = 0; P.zsUntil = 0; P.cdBuffUntil = 0;
+    // --- 重置敌人状态（回满血、清读条、重置施法计时）---
+    E.data.hp = E.data.maxHp;
+    E.casting = false; E.castEndAt = 0;
+    E.nextCastAt = Date.now() + (E.data.castEvery || 4000);
+    const es = $('enemy-sprite'); if(es) es.classList.remove('dying','casting');
+    if($('kill-burst')) $('kill-burst').classList.remove('go');
+    const dl = $('drop-layer'); if(dl) dl.innerHTML = '';
+    // --- 重新开战 ---
+    this.active = true;
+    this.renderButtons(); this.renderSeals(); this.renderQi();
+    this.renderFollow(); this.renderHp();
+    this.startEnemyAttack();
+    this.logPush('<span class="win">重新振作！'+E.data.name+' 恢复全盛状态</span>');
   },
 
   // ---------- 循环帧 ----------
@@ -780,10 +842,27 @@ const Battle = {
     const tg = $('tGold'); if(tg) tg.textContent = P.gold;
     const tc = $('tCry'); if(tc) tc.textContent = P.crystal;
     const tm = $('tMat'); if(tm) tm.textContent = MAT_ORDER.reduce((s,k)=>s+(P.materials[k]||0),0);
-    $('statMat').textContent = MAT_ORDER.map(k=>{
+    $('statMat').innerHTML = MAT_ORDER.map(k=>{
       const n=P.materials[k]||0;
-      return n>0 ? '<span style="color:'+MATERIALS[k].color+'">'+MATERIALS[k].name+':'+n+'</span>' : '';
-    }).filter(Boolean).join(' ') || '0';
+      return n>0 ? '<span class="mat-item" style="color:'+MATERIALS[k].color+'">●'+n+'</span>' : '';
+    }).filter(Boolean).join(' ') || '<span class="mat-item zero">●0</span>';
+    this.renderExp();
+  },
+
+  // 玩家等级 + 经验条（战斗左下角，方便判断升级进度）
+  renderExp(){
+    const lv = $('ppLv'); if(lv) lv.textContent = 'Lv.'+P.level;
+    const fill = $('ppExpFill'); if(!fill) return;
+    const txt = $('ppExpText');
+    if(P.level >= LEVEL_CAP){
+      fill.style.width = '100%';
+      if(txt) txt.textContent = 'MAX';
+      return;
+    }
+    const need = expForLevel(P.level);
+    const pct = Math.max(0, Math.min(100, Math.floor(P.exp/need*100)));
+    fill.style.width = pct+'%';
+    if(txt) txt.textContent = P.exp+'/'+need;
   },
 
   logPush(str){
@@ -827,6 +906,9 @@ const Battle = {
     this.hideCastBar();
     if($('overlay')) $('overlay').classList.remove('show');
     this._settleTimer && clearTimeout(this._settleTimer);
+    this._respawnTimer && clearTimeout(this._respawnTimer);   // 取消敌人重生/复活排程，防止后台把 active 重新置 true
+    this.hideDeathOverlay();                                  // 关闭死亡遮罩并停止倒计时
+    if(E.data){ E.casting = false; E.castEndAt = 0; }         // 清敌人读条状态
     this.showScreen('screen-zone');
   },
 

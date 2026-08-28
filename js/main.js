@@ -57,9 +57,9 @@ function goScreen(name, navKey){
   Battle.showScreen(name);
   renderCurrency();
   const inBattle = (name === 'battle-screen');
-  $('#top-currency').style.display = inBattle ? 'none' : 'flex';
-  $('#reset-save').style.display = inBattle ? 'none' : 'flex';
-  $('#bottom-nav').style.display = inBattle ? 'none' : 'flex';
+  $('top-currency').style.display = inBattle ? 'none' : 'flex';
+  $('reset-save').style.display = inBattle ? 'none' : 'flex';
+  $('bottom-nav').style.display = inBattle ? 'none' : 'flex';
   $$('#bottom-nav .nav-btn').forEach(b=>{
     b.classList.toggle('active', b.dataset.screen === navKey);
   });
@@ -67,9 +67,9 @@ function goScreen(name, navKey){
 
 // 进入战斗：由 Battle.enter 回调调用（其内部走 showScreen，不走 goScreen）
 window.onBattleEnter = function(){
-  $('#top-currency').style.display = 'none';
-  $('#reset-save').style.display = 'none';
-  $('#bottom-nav').style.display = 'none';
+  $('top-currency').style.display = 'none';
+  $('reset-save').style.display = 'none';
+  $('bottom-nav').style.display = 'none';
   $$('#bottom-nav .nav-btn').forEach(b=>b.classList.remove('active'));
 };
 
@@ -554,7 +554,7 @@ function forgeOrEquip(wp){
   // 消耗
   if(wp.cost.gold) P.gold -= wp.cost.gold;
   ['iron','bone','crystal','soul'].forEach(k=>{ if(wp.cost[k]) P.materials[k]-=wp.cost[k]; });
-  P.weaponsOwned.push(wp.id);
+  P.weaponCount[wp.id] = (P.weaponCount[wp.id]||0) + 1;
   P.weapon = wp.id;
   toast('锻造并装备 '+wp.name+'！');
   saveGame();

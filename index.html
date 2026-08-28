@@ -55,6 +55,10 @@
 
   <!-- ===== 左下 玩家状态 ===== -->
   <div id="player-panel">
+    <div class="pp-exp">
+      <div class="lv-badge" id="ppLv">Lv.1</div>
+      <div class="exp-bar pp-expbar"><div class="exp-fill" id="ppExpFill"></div><span id="ppExpText">0/120</span></div>
+    </div>
     <div class="pp-hp">
       <div class="hp-icon">❤</div>
       <div class="hp-bar">
@@ -83,6 +87,16 @@
 
   <!-- ===== 战斗记录 ===== -->
   <div id="combat-log"></div>
+
+  <!-- ===== 死亡遮罩 ===== -->
+  <div id="death-overlay">
+    <div class="death-box">
+      <div class="death-icon">☠</div>
+      <div class="death-title">你被击败了</div>
+      <div class="death-sub" id="deathBy"></div>
+      <div class="death-count" id="deathCount"></div>
+    </div>
+  </div>
 
   <!-- ===== 咏唱读条 ===== -->
   <div id="cast-bar"><div id="cast-fill"></div><span id="cast-text">咏唱中…</span></div>
