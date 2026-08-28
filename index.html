@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>雪月花 · Setsugekka</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- 战斗画面                                               -->
+<!-- ============================================================ -->
+<div id="battle-screen" class="screen">
+  <div id="bg" class="bg-layer"></div>
+  <div id="bg-vignette"></div>
+
+  <!-- ===== 顶部 HUD ===== -->
+  <div id="hud-top">
+    <div class="hud-zone" id="zoneName">—</div>
+    <div class="hud-res">
+      <div class="res-pill"><span class="res-ico ico-gold">◆</span><b id="statGold">0</b></div>
+      <div class="res-pill"><span class="res-ico ico-cry">◆</span><b id="statCrystal">0</b></div>
+      <div class="res-pill mat-pill"><span class="res-ico">◆</span><b id="statMat">0</b></div>
+    </div>
+    <button class="hud-auto" id="btnAuto">⚔ 自动</button>
+    <button class="hud-retreat" id="btnRetreat">退出</button>
+  </div>
+
+  <!-- ===== 敌人舞台 ===== -->
+  <div id="arena">
+    <div id="enemy-stage">
+      <div class="boss-bar">
+        <div class="boss-tag"><span id="boss-name">敌方</span><span class="boss-lv" id="bossLv">•</span></div>
+        <div class="hp-track">
+          <div id="boss-hp-fill" class="hp-fill"></div>
+          <span class="hp-num" id="boss-hp-text">0/0</span>
+        </div>
+      </div>
+      <div id="enemy-sprite">
+        <div id="enemy-shadow"></div>
+        <img id="enemy-img" src="" alt="">
+      </div>
+      <div id="drop-layer"></div>
+      <div id="kill-burst"></div>
+      <div id="dmg-nums"></div>
+    </div>
+
+    <!-- 玩家手臂（第一人称） -->
+    <div id="player-arm">
+      <img id="arm-img" src="img/arm_katana.svg" alt="">
+      <div id="slash-effect"></div>
+    </div>
+  </div>
+
+  <!-- ===== 左下 玩家状态 ===== -->
+  <div id="player-panel">
+    <div class="pp-hp">
+      <div class="hp-icon">❤</div>
+      <div class="hp-bar">
+        <div id="player-hp-fill"></div>
+        <span id="player-hp-text">100/100</span>
+      </div>
+    </div>
+    <div class="pp-qi">
+      <div class="qi-icon">⚡</div>
+      <div class="qi-bar">
+        <div id="qi-fill"></div>
+        <span id="qi-text">0/100</span>
+      </div>
+    </div>
+    <div class="pp-seals">
+      <div class="seal" id="sealSnow">❆</div>
+      <div class="seal" id="sealMoon">☾</div>
+      <div class="seal" id="sealHana">❀</div>
+      <span class="seal-tip" id="sealTip"></span>
+    </div>
+    <div class="pp-buffs">
+      <span class="buff-chip chip-zs" id="chipZs" style="display:none"></span>
+      <span class="buff-chip chip-cd" id="chipCd" style="display:none"></span>
+    </div>
+  </div>
+
+  <!-- ===== 战斗记录 ===== -->
+  <div id="combat-log"></div>
+
+  <!-- ===== 咏唱读条 ===== -->
+  <div id="cast-bar"><div id="cast-fill"></div><span id="cast-text">咏唱中…</span></div>
+
+  <!-- ===== 技能栏 ===== -->
+  <div id="skill-bar">
+    <!-- 第一行：格挡 + 剑气·一闪 + 战意（非GCD） + 追斩（GCD） -->
+    <div class="skill-row">
+      <div class="skill-slot non-gcd"><button class="skill-btn" id="btnSkill5"><img class="skill-icon" id="icon5" src="img/ico_shield.svg" alt=""><span class="unlock-badge"></span><span class="skill-label">格挡</span><div class="cd-sweep" id="cd5"></div></button></div>
+      <div class="skill-slot non-gcd qi"><button class="skill-btn" id="btnSkill6"><img class="skill-icon" id="icon6" src="img/ico_snow.svg" alt=""><span class="cost-badge">50⚡</span><span class="unlock-badge"></span><span class="skill-label">一闪</span><div class="cd-sweep" id="cd6"></div></button></div>
+      <div class="skill-slot non-gcd"><button class="skill-btn" id="btnSkill7"><img class="skill-icon" id="icon7" src="img/ico_hana.svg" alt=""><span class="unlock-badge"></span><span class="skill-label">战意</span><div class="cd-sweep" id="cd7"></div></button></div>
+      <div class="skill-slot gcd follow"><button class="skill-btn" id="btnSkill8"><img class="skill-icon" id="icon8" src="img/ico_moon.svg" alt=""><span class="unlock-badge"></span><span class="skill-label">追斩</span><div class="cd-sweep" id="cd8"></div></button></div>
+    </div>
+    <!-- 第二行（基础连招）：连招三键 + 大招（GCD） -->
+    <div class="skill-row row2">
+      <div class="skill-slot gcd"><button class="skill-btn" id="btnSkill1"><img class="skill-icon" id="icon1" src="img/ico_slash.svg" alt=""><span class="stage-badge" id="badge1">Ⅰ</span><span class="unlock-badge"></span><span class="skill-label" id="label1">斩</span><div class="cd-sweep" id="cd1"></div></button></div>
+      <div class="skill-slot gcd"><button class="skill-btn" id="btnSkill2"><img class="skill-icon" id="icon2" src="img/ico_slash.svg" alt=""><span class="stage-badge" id="badge2">Ⅰ</span><span class="unlock-badge"></span><span class="skill-label" id="label2">突</span><div class="cd-sweep" id="cd2"></div></button></div>
+      <div class="skill-slot gcd"><button class="skill-btn" id="btnSkill3"><img class="skill-icon" id="icon3" src="img/ico_slash.svg" alt=""><span class="stage-badge" id="badge3"></span><span class="unlock-badge"></span><span class="skill-label" id="label3">斩落</span><div class="cd-sweep" id="cd3"></div></button></div>
+      <div class="skill-slot ult"><button class="skill-btn" id="btnSkill4"><img class="skill-icon" id="icon4" src="img/ico_hana.svg" alt=""><span class="unlock-badge"></span><span class="skill-label">居合</span><div class="cd-sweep" id="cd4"></div></button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 顶部货币栏（通用，非战斗界面显示）                    -->
+<!-- ============================================================ -->
+<div id="top-currency">
+  <div class="res-pill"><span class="res-ico ico-gold">◆</span><b id="tGold">0</b></div>
+  <div class="res-pill"><span class="res-ico ico-cry">◆</span><b id="tCry">0</b></div>
+  <div class="res-pill mat-pill"><span class="res-ico">◆</span><b id="tMat">0</b></div>
+</div>
+<button id="reset-save" title="清空存档重新开始">🗑 重置</button>
+
+<!-- ============================================================ -->
+<!-- 主页                                                          -->
+<!-- ============================================================ -->
+<div id="screen-home" class="screen">
+  <div class="home-hero">
+    <div class="home-title">雪月花</div>
+    <div class="home-sub">SETSUGEKKA · 幕末三印物语</div>
+  </div>
+  <div class="home-sword"><img src="img/arm_katana.svg" alt=""></div>
+  <div class="home-cta">
+    <button class="btn gold home-start" id="btnEnter">⚔ 开始讨伐</button>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 区域选择（选关）                                            -->
+<!-- ============================================================ -->
+<div id="screen-zone" class="screen">
+  <div class="page-header">
+    <div class="ph-title">讨伐</div>
+    <div class="ph-sub">CHALLENGE</div>
+  </div>
+  <div class="p-stats" id="zonePlayerInfo"></div>
+  <div class="scroll-area" id="zoneList"></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 角色                                                          -->
+<!-- ============================================================ -->
+<div id="screen-char" class="screen">
+  <div class="page-header">
+    <div class="ph-title">角色</div>
+    <div class="ph-sub">CHARACTER</div>
+  </div>
+  <div class="char-panel">
+    <div id="charStats"></div>
+  </div>
+  <button class="btn char-wp-btn" id="charWeaponBtn"></button>
+  <div class="char-sub">养成</div>
+  <div class="scroll-area" id="charSkills"></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 锻造                                                          -->
+<!-- ============================================================ -->
+<div id="screen-forge" class="screen">
+  <div class="page-header">
+    <div class="ph-title">锻造</div>
+    <div class="ph-sub">FORGE</div>
+  </div>
+  <div class="forge-viewer" id="forgeViewer">
+    <div class="fv-top">
+      <button class="fv-arrow" id="fvPrev" aria-label="上一把">‹</button>
+      <div class="fv-img" id="fvImgBox"><img id="fvImg" src="img/ico_slash.svg" alt=""></div>
+      <button class="fv-arrow" id="fvNext" aria-label="下一把">›</button>
+    </div>
+    <div class="fv-name" id="fvName"></div>
+    <div class="fv-stat" id="fvStat"></div>
+    <div class="fv-tier" id="fvTier"></div>
+    <div class="fv-own" id="fvOwn"></div>
+    <div class="fv-req" id="fvReq"></div>
+    <div class="fv-dots" id="fvDots"></div>
+  </div>
+  <div class="fv-bottom">
+    <button class="btn fv-btn fv-forge" id="fvForge"></button>
+    <button class="btn fv-btn fv-equip" id="fvEquip"></button>
+    <button class="btn fv-btn fv-upg" id="fvUpg"></button>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 商店                                                          -->
+<!-- ============================================================ -->
+<div id="screen-shop" class="screen">
+  <div class="page-header">
+    <div class="ph-title">商店</div>
+    <div class="ph-sub">SHOP</div>
+  </div>
+  <div class="shop-note">◆ 钻石为内购货币（正式版付费获得）；原型阶段用下方按钮测试</div>
+  <div class="menu-actions">
+    <button class="btn" id="btnTestDiamond">◆ 调试：+1000 钻石</button>
+  </div>
+  <div class="scroll-area" id="shopList"></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 底部导航（通用，非战斗界面显示）                    -->
+<!-- ============================================================ -->
+<div id="bottom-nav">
+  <button class="nav-btn" data-screen="screen-zone" id="navZone"><span class="nav-ico">⚔</span><span class="nav-txt">选关</span></button>
+  <button class="nav-btn" data-screen="screen-char" id="navChar"><span class="nav-ico">⛩</span><span class="nav-txt">角色</span></button>
+  <button class="nav-btn" data-screen="screen-forge" id="navForge"><span class="nav-ico">🔨</span><span class="nav-txt">锻造</span></button>
+  <button class="nav-btn" data-screen="screen-shop" id="navShop"><span class="nav-ico">🛒</span><span class="nav-txt">商店</span></button>
+</div>
+
+<div id="toast"></div>
+<div id="banner"></div>
+<div id="skill-tip"></div>
+
+<!-- 武器选择弹窗（二级） -->
+<div id="weaponPick" class="wp-pick">
+  <div class="wp-pick-box">
+    <div class="wp-pick-head">选择武器<span class="wp-pick-close" id="weaponPickClose">✕</span></div>
+    <div class="scroll-area wp-pick-list" id="charWeapons"></div>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <radialGradient id="gskin" cx="0.45" cy="0.35" r="0.8">
+      <stop offset="0" stop-color="#6ac49a"/>
+      <stop offset="1" stop-color="#2a7a58"/>
+    </radialGradient>
+    <linearGradient id="gvest" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a4a68"/>
+      <stop offset="1" stop-color="#0e3247"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="64" cy="118" rx="30" ry="6" fill="rgba(0,0,0,0.35)"/>
+  <!-- ears -->
+  <path d="M18 46 L44 56 L28 66 Z" fill="url(#gskin)" stroke="#1d5a40" stroke-width="2"/>
+  <path d="M110 46 L84 56 L100 66 Z" fill="url(#gskin)" stroke="#1d5a40" stroke-width="2"/>
+  <!-- head -->
+  <ellipse cx="64" cy="54" rx="30" ry="26" fill="url(#gskin)" stroke="#1d5a40" stroke-width="2"/>
+  <!-- brow -->
+  <path d="M40 44 L56 50" stroke="#1d5a40" stroke-width="3" stroke-linecap="round"/>
+  <path d="M88 44 L72 50" stroke="#1d5a40" stroke-width="3" stroke-linecap="round"/>
+  <!-- eyes -->
+  <ellipse cx="50" cy="56" rx="5" ry="6" fill="#fff"/>
+  <ellipse cx="78" cy="56" rx="5" ry="6" fill="#fff"/>
+  <circle cx="50" cy="57" r="3" fill="#e03030"/>
+  <circle cx="78" cy="57" r="3" fill="#e03030"/>
+  <!-- mouth with fangs -->
+  <path d="M50 70 Q64 78 78 70" stroke="#1d5a40" stroke-width="3" fill="none"/>
+  <rect x="56" y="71" width="4" height="6" rx="1" fill="#eee"/>
+  <rect x="68" y="71" width="4" height="6" rx="1" fill="#eee"/>
+  <!-- body/vest -->
+  <path d="M38 100 Q64 84 90 100 L90 112 Q64 118 38 112 Z" fill="url(#gvest)" stroke="#0e3247" stroke-width="2"/>
+  <!-- dagger -->
+  <rect x="98" y="78" width="4" height="26" fill="#c8c8d8" stroke="#888" stroke-width="1" transform="rotate(20 100 90)"/>
+  <rect x="95" y="98" width="12" height="4" rx="2" fill="#5a4a30" transform="rotate(20 100 100)"/>
+<path d="M84 104 Q116 108 122 86" stroke="#2a7a58" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M50 34 L56 24 L60 34 Z" fill="#1d5a40"/><path d="M64 32 L70 22 L74 32 Z" fill="#1d5a40"/><path d="M50 12 L56 20 L61 10 L66 20 L72 10 L76 20 L80 12 L78 22 L52 22 Z" fill="#e86aff" stroke="#a03ac0"/></svg>

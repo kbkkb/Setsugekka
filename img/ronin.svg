@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="armorG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7a2a3a"/>
+      <stop offset="1" stop-color="#3a1220"/>
+    </linearGradient>
+    <linearGradient id="plateG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a4a66"/>
+      <stop offset="1" stop-color="#262638"/>
+    </linearGradient>
+    <radialGradient id="bossAura" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#ff2d55" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ff2d55" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bladG" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#dfe4f0"/>
+      <stop offset="0.5" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#9aa4c0"/>
+    </linearGradient>
+  </defs>
+  <circle cx="96" cy="96" r="90" fill="url(#bossAura)"/>
+  <ellipse cx="96" cy="178" rx="46" ry="8" fill="rgba(0,0,0,0.4)"/>
+
+  <!-- katana raised on the right -->
+  <g transform="rotate(28 150 60)">
+    <rect x="146" y="6" width="7" height="96" rx="2" fill="url(#bladG)" stroke="#7a829a"/>
+    <rect x="138" y="100" width="23" height="6" rx="3" fill="#c9a13b" stroke="#7a5d1d"/>
+    <rect x="146" y="106" width="7" height="26" fill="#1d1410"/>
+    <path d="M146 112 h7 M146 118 h7 M146 124 h7" stroke="#8a3a4a" stroke-width="1.5"/>
+  </g>
+
+  <!-- helmet -->
+  <path d="M66 54 Q66 24 96 24 Q126 24 126 54 L118 58 L74 58 Z" fill="url(#plateG)" stroke="#1a1a28" stroke-width="2"/>
+  <!-- crescent crest -->
+  <path d="M96 8 A16 16 0 1 0 96 40 A13 13 0 1 1 96 8 Z" fill="#f5c542" stroke="#a07d1d" stroke-width="1"/>
+  <!-- menpo mask -->
+  <path d="M72 58 L120 58 L112 86 L80 86 Z" fill="url(#armorG)" stroke="#1a1a28" stroke-width="2"/>
+  <path d="M84 66 L108 66" stroke="#ff4d4d" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- shoulders -->
+  <path d="M48 92 Q48 76 70 74 L74 96 Q58 100 48 92 Z" fill="url(#armorG)" stroke="#1a1a28" stroke-width="2"/>
+  <path d="M144 92 Q144 76 122 74 L118 96 Q134 100 144 92 Z" fill="url(#armorG)" stroke="#1a1a28" stroke-width="2"/>
+
+  <!-- cuirass with plates -->
+  <path d="M72 92 L120 92 L126 150 L66 150 Z" fill="url(#armorG)" stroke="#1a1a28" stroke-width="2"/>
+  <path d="M68 104 h56 M70 116 h52 M72 128 h48 M74 140 h44" stroke="#1a1a28" stroke-width="2"/>
+  <circle cx="96" cy="111" r="5" fill="#f5c542" stroke="#a07d1d"/>
+
+  <!-- arms -->
+  <path d="M52 96 Q44 112 50 138 L62 134 Q58 112 64 100" fill="url(#plateG)" stroke="#1a1a28" stroke-width="2"/>
+  <path d="M136 118 Q140 100 134 92" fill="none" stroke="#1a1a28" stroke-width="0"/>
+
+  <!-- skirt plates -->
+  <path d="M72 150 h48 M76 160 h40 M80 170 h32" stroke="url(#armorG)" stroke-width="8" stroke-linecap="round"/>
+</svg>

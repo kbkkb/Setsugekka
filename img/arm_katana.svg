@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <defs>
+    <linearGradient id="armBlade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#a8b4d4"/>
+      <stop offset="0.5" stop-color="#f2f6ff"/>
+      <stop offset="1" stop-color="#8a94b4"/>
+    </linearGradient>
+    <linearGradient id="sleeveG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a4a86"/>
+      <stop offset="1" stop-color="#1c2446"/>
+    </linearGradient>
+    <linearGradient id="skinG" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e8c8a8"/>
+      <stop offset="1" stop-color="#b8906a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- katana blade pointing up-left from hand -->
+  <g transform="rotate(-38 140 160)">
+    <rect x="40" y="150" width="130" height="9" rx="3" fill="url(#armBlade)"/>
+    <rect x="40" y="150" width="130" height="3" rx="1.5" fill="#ffffff" opacity="0.85"/>
+    <path d="M40 150 L28 155 L40 159 Z" fill="#f2f6ff"/>
+    <!-- tsuba -->
+    <ellipse cx="172" cy="154" rx="5" ry="12" fill="#c9a13b" stroke="#7a5d1d" stroke-width="1.5"/>
+    <!-- tsuka -->
+    <rect x="178" y="148" width="34" height="13" rx="4" fill="#241019"/>
+    <path d="M180 150 l4 2 l-4 2 l4 2 l-4 2 l4 2" stroke="#8a3a4a" stroke-width="1.6" fill="none"/>
+    <path d="M190 150 l4 2 l-4 2 l4 2 l-4 2 l4 2" stroke="#8a3a4a" stroke-width="1.6" fill="none"/>
+    <rect x="210" y="149" width="5" height="11" rx="2" fill="#c9a13b"/>
+  </g>
+
+  <!-- hand gripping tsuka -->
+  <ellipse cx="168" cy="86" rx="17" ry="14" fill="url(#skinG)" stroke="#8a6242" stroke-width="1.5"/>
+  <ellipse cx="158" cy="78" rx="6" ry="9" fill="url(#skinG)" stroke="#8a6242" stroke-width="1.5" transform="rotate(-38 158 78)"/>
+
+  <!-- sleeve / forearm from bottom-right -->
+  <path d="M186 118 Q210 130 226 170 L240 240 L150 240 Q142 170 150 130 Q158 100 186 118 Z" fill="url(#sleeveG)" stroke="#131a30" stroke-width="2"/>
+  <path d="M164 128 Q180 124 194 132" stroke="#5a6cae" stroke-width="2" fill="none" opacity="0.6"/>
+</svg>

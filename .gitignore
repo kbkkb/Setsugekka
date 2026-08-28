@@ -1,0 +1,17 @@
+# 备份 / 临时
+*.bak
+*.tmp
+
+# 未引用的占位图（游戏实际使用 SVG）
+img/*.png
+
+# 系统 / 编辑器垃圾
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# 本地依赖（若后续引入构建）
+node_modules/
