@@ -50,6 +50,7 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 .hud-zone{font-size:14px;font-weight:600;letter-spacing:1px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.6);display:flex;align-items:center;gap:6px}
 .hud-zone::before{content:'';width:6px;height:6px;border-radius:3px;background:var(--gold);box-shadow:0 0 8px var(--gold)}
 .hud-res{margin-left:auto;display:flex;gap:7px}
+.hud-timer{margin-left:auto;font-size:13px;font-weight:800;letter-spacing:1px;color:#ffd24a;font-variant-numeric:tabular-nums;text-shadow:0 0 10px rgba(255,200,60,.45)}
 .res-pill{display:flex;align-items:center;gap:5px;background:rgba(20,28,48,.85);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;backdrop-filter:blur(6px)}
 .res-pill b{color:var(--gold)}
 .res-pill .res-ico{font-size:11px}
@@ -59,13 +60,15 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 .mat-pill .mat-item{font-size:11px;line-height:1;letter-spacing:.5px}
 .mat-pill .mat-item.zero{color:#5a6484}
 .hud-retreat{border:1px solid var(--line);background:rgba(20,28,48,.8);color:var(--muted);font-size:11px;padding:5px 10px;border-radius:9px;cursor:pointer}
-.hud-auto{border:1px solid var(--line-gold);background:rgba(20,28,48,.8);color:var(--gold);font-size:11px;padding:5px 10px;border-radius:9px;cursor:pointer;transition:transform .12s,background .2s}
+.hud-help{margin-left:auto;width:26px;height:26px;border-radius:50%;border:1px solid var(--line-gold);background:rgba(20,28,48,.8);color:var(--gold);font-size:13px;font-weight:800;cursor:pointer;line-height:1}
+.hud-help:active{transform:scale(.9)}
+.hud-auto{margin-left:10px;border:1px solid var(--line-gold);background:rgba(20,28,48,.8);color:var(--gold);font-size:11px;padding:5px 10px;border-radius:9px;cursor:pointer;transition:transform .12s,background .2s}
 .hud-auto.on{background:linear-gradient(180deg,rgba(255,210,74,.9),rgba(255,176,32,.85));border-color:var(--gold);color:#241a00;box-shadow:0 0 16px rgba(255,200,60,.4)}
 .hud-auto.on:active{transform:scale(.94)}
 
 /* ---------- 敌人舞台 ---------- */
 #arena{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2}
-#enemy-stage{position:relative;width:min(88%,300px);text-align:center;transform:translateY(-6%)}
+#enemy-stage{position:relative;width:min(88%,300px);text-align:center;transform:translateY(-14%)}
 
 /* Boss 名牌 + 血条 */
 .boss-bar{margin-bottom:18px}
@@ -75,6 +78,11 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 .hp-track{position:relative;height:14px;border-radius:999px;background:rgba(0,0,0,.5);border:1px solid rgba(255,120,140,.35);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.6)}
 .hp-fill{height:100%;border-radius:999px;background:linear-gradient(180deg,#ff8590,#ff4d5e);box-shadow:0 0 12px rgba(255,77,94,.6);transition:width .2s ease}
 .hp-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:1px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+/* 敌人技能读条 */
+.ecast-bar{position:relative;height:12px;margin-top:6px;border-radius:999px;background:rgba(0,0,0,.5);border:1px solid rgba(255,140,60,.55);overflow:hidden;display:none;box-shadow:0 0 12px rgba(255,120,40,.3)}
+.ecast-bar.show{display:block}
+#enemyCastFill{height:100%;width:0;background:linear-gradient(90deg,#ff8c3a,#ffd24a);box-shadow:0 0 10px rgba(255,150,60,.7);transition:width .1s linear}
+#enemyCastText{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;letter-spacing:1px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.9)}
 
 /* 敌人 */
 #enemy-sprite{position:relative;height:150px;display:flex;align-items:flex-end;justify-content:center}
@@ -100,36 +108,34 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 #slash-effect.hit::after{animation:slashFlash .3s forwards}
 @keyframes slashFlash{0%{opacity:1;transform:scale(.4)}100%{opacity:0;transform:scale(1.6)}}
 
-/* ---------- 左下玩家面板 ---------- */
-#player-panel{position:absolute;left:16px;bottom:118px;bottom:calc(118px + var(--safe-bottom));z-index:40;width:168px;display:flex;flex-direction:column;gap:10px;background:rgba(13,19,34,.72);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px;padding:11px 12px;box-shadow:var(--shadow)}
-.pp-hp{display:flex;align-items:center;gap:9px}
-/* 等级 + 经验条 */
-.pp-exp{display:flex;align-items:center;gap:7px}
-.lv-badge{font-size:10.5px;font-weight:700;color:#241a00;background:linear-gradient(180deg,#ffd24a,#ffb020);border-radius:8px;padding:3px 7px;white-space:nowrap;box-shadow:0 2px 8px rgba(255,200,60,.35)}
-.pp-expbar{position:relative;flex:1;height:11px;margin:0}
-#ppExpText{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.8)}
+/* ---------- 玩家状态条（居中，技能栏上方） ---------- */
+#player-bars{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(186px + var(--safe-bottom));z-index:40;width:min(80%,320px);display:flex;flex-direction:column;gap:5px}
+.pb-buffs{display:flex;gap:6px;justify-content:center;min-height:16px}
+.pb-hp{display:flex;align-items:center;gap:9px}
+.pb-exp{display:flex;align-items:center;gap:7px}
+.lv-badge{font-size:10.5px;font-weight:700;color:#241a00;background:linear-gradient(180deg,#ffd24a,#ffb020);border-radius:8px;padding:2px 6px;white-space:nowrap;box-shadow:0 2px 8px rgba(255,200,60,.35)}
+.pb-expbar{position:relative;flex:1;height:8px;margin:0}
 .hp-icon{width:26px;height:26px;border-radius:50%;background:linear-gradient(180deg,#ff5b6b,#ff3350);color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(255,77,94,.5)}
 .hp-bar{position:relative;flex:1;height:15px;border-radius:999px;background:rgba(0,0,0,.5);border:1px solid rgba(120,160,255,.18);overflow:hidden}
 #player-hp-fill{height:100%;border-radius:999px;background:linear-gradient(180deg,#3fe08a,#16b766);transition:width .18s ease}
-#player-hp-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.8)}
-.pp-seals{display:flex;align-items:center;gap:8px}
+
+/* ---------- 右侧：三印（三角堆叠）+ 剑气槽 ---------- */
+#seal-qi-col{position:absolute;right:12px;bottom:calc(258px + var(--safe-bottom));z-index:40;display:flex;flex-direction:column;align-items:center;gap:8px}
+.seal-tri{position:relative;width:86px;height:74px}
 .seal{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;color:#404a64;background:rgba(10,14,26,.8);border:1.5px solid rgba(120,160,255,.2);transition:all .25s}
+.seal-tri .seal{position:absolute}
+#sealSnow{top:0;left:50%;margin-left:-15px}
+#sealMoon{bottom:0;left:0}
+#sealHana{bottom:0;right:0}
 .seal.lit-snow{color:#aee7ff;border-color:#4dc3ff;box-shadow:0 0 12px #4dc3ff;background:rgba(30,70,110,.6)}
 .seal.lit-moon{color:#e8dcff;border-color:#a06aff;box-shadow:0 0 12px #a06aff;background:rgba(70,40,120,.6)}
 .seal.lit-hana{color:#ffd0e4;border-color:#ff2d92;box-shadow:0 0 12px #ff2d92;background:rgba(90,20,60,.6)}
-.seal-tip{font-size:10px;color:var(--muted);margin-left:2px}
-
-/* 剑气条 */
-.pp-qi{display:flex;align-items:center;gap:9px}
-.qi-icon{width:26px;height:26px;border-radius:50%;background:linear-gradient(180deg,#59c9ff,#2a86ff);color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(77,195,255,.5)}
-.qi-bar{position:relative;flex:1;height:13px;border-radius:999px;background:rgba(0,0,0,.5);border:1px solid rgba(77,195,255,.28);overflow:hidden}
+.pb-qi{width:86px}
+.qi-bar{position:relative;height:14px;border-radius:999px;background:rgba(0,0,0,.5);border:1px solid rgba(77,195,255,.28);overflow:hidden}
 #qi-fill{height:100%;border-radius:999px;background:linear-gradient(180deg,#7fdcff,#2a9fff);transition:width .18s ease}
-#qi-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.8)}
+#qi-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.85)}
 
 /* ---------- 战斗记录 ---------- */
-#combat-log{position:absolute;left:16px;bottom:296px;bottom:calc(296px + var(--safe-bottom));z-index:20;width:150px;font-size:10.5px;line-height:1.7;color:var(--muted);overflow:hidden;max-height:150px;mask-image:linear-gradient(transparent,#000 30%)}
-#combat-log .dmg-you{color:var(--gold)}
-
 /* ---------- 死亡遮罩 ---------- */
 #death-overlay{position:absolute;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(5,2,8,.78);backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .35s}
 #death-overlay.show{opacity:1;pointer-events:auto}
@@ -139,12 +145,6 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 .death-title{margin-top:10px;font-size:20px;font-weight:800;letter-spacing:6px;color:#ffdde3}
 .death-sub{margin-top:6px;font-size:12px;color:var(--muted)}
 .death-count{margin-top:14px;font-size:13px;font-weight:700;color:#ff8296;letter-spacing:2px}
-#combat-log .dmg-ene{color:var(--red)}
-#combat-log .dmg-def{color:var(--cry)}
-#combat-log .warn{color:var(--purple)}
-#combat-log .win{color:var(--green)}
-#combat-log .muted{color:var(--muted)}
-#combat-log .qi{color:#4dc3ff}
 
 /* ---------- 技能栏 ---------- */
 #skill-bar{position:absolute;left:0;right:0;bottom:0;z-index:45;padding:12px 16px;padding-bottom:calc(12px + var(--safe-bottom));background:linear-gradient(180deg,transparent,var(--bg0) 38%);pointer-events:none}
@@ -171,6 +171,7 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 .skill-btn.ult-ready{animation:ultPulse .5s infinite alternate;border-color:var(--gold);box-shadow:0 0 18px var(--gold),inset 0 0 12px rgba(255,210,74,.3)}
 @keyframes ultPulse{from{transform:scale(1)}to{transform:scale(1.12)}}
 .skill-btn.locked{filter:grayscale(.9) brightness(.55)}
+.skill-btn.cond-off{filter:grayscale(.85) brightness(.55);cursor:not-allowed}
 /* 追斩就绪（大招后高亮） */
 .skill-slot.follow .skill-btn{border-color:rgba(160,106,255,.45)}
 .skill-btn.follow-ready{animation:followPulse .5s infinite alternate;border-color:#a06aff;box-shadow:0 0 18px #a06aff,inset 0 0 12px rgba(160,106,255,.35)}
@@ -184,8 +185,7 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 .cost-badge{position:absolute;top:3px;left:5px;font-size:9px;font-weight:700;color:#4dc3ff;z-index:3;text-shadow:0 1px 3px rgba(0,0,0,.8)}
 /* 技能解锁等级角标 */
 .unlock-badge{position:absolute;inset:0;z-index:7;display:none;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#cdd6f2;background:rgba(5,8,16,.55);border-radius:16px;letter-spacing:.5px}
-/* buff 持续角标（锐锋/迅疾） */
-.pp-buffs{display:flex;gap:6px;min-height:18px}
+/* buff 持续角标（锐锋/迅疾）—— .pb-buffs 已定义于玩家状态条 */
 .buff-chip{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid}
 .chip-zs{color:#ffd24a;border-color:rgba(255,210,74,.5);background:rgba(255,210,74,.08)}
 .chip-cd{color:#aee7ff;border-color:rgba(77,195,255,.5);background:rgba(77,195,255,.08)}
@@ -193,12 +193,31 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 .skill-row.row2{margin-top:10px}
 
 /* ---------- 咏唱读条（技能栏上方） ---------- */
-#cast-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(178px + var(--safe-bottom));z-index:46;width:min(70%,320px);height:18px;border-radius:999px;background:rgba(0,0,0,.6);border:1px solid rgba(168,124,255,.55);overflow:hidden;display:none;box-shadow:0 0 14px rgba(160,106,255,.35)}
+#cast-bar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(248px + var(--safe-bottom));z-index:46;width:min(70%,320px);height:18px;border-radius:999px;background:rgba(0,0,0,.6);border:1px solid rgba(168,124,255,.55);overflow:hidden;display:none;box-shadow:0 0 14px rgba(160,106,255,.35)}
 #cast-bar.show{display:block}
 #cast-fill{height:100%;width:0%;background:linear-gradient(90deg,#7a4dd8,#c9a6ff);box-shadow:0 0 10px rgba(180,140,255,.7)}
 #cast-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;letter-spacing:1px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9)}
 /* 攻击按压闪光 */
 .skill-btn.used::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,.3);z-index:5;animation:slashFlash .25s forwards}
+
+/* ---------- 新手指南弹窗 ---------- */
+#tut-pop{position:absolute;inset:0;z-index:46;display:none;align-items:center;justify-content:center;background:rgba(5,8,16,.78);backdrop-filter:blur(5px)}
+#tut-pop.show{display:flex}
+.tut-box{width:min(88%,340px);max-height:82vh;overflow-y:auto;background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line-gold);border-radius:16px;padding:18px 18px 16px;box-shadow:0 0 46px rgba(255,200,60,.18);animation:deathIn .3s ease}
+.tut-combo{margin:10px 0 4px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:rgba(10,14,26,.55)}
+.tut-ct{font-size:10.5px;color:var(--muted);margin-bottom:6px;letter-spacing:.5px}
+.tut-route{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11.5px;color:var(--text);margin:6px 0}
+.tr-seq{font-weight:600;letter-spacing:.5px}
+.tr-r{font-size:10.5px;white-space:nowrap}
+.tut-title{text-align:center;font-size:16px;font-weight:800;letter-spacing:4px;color:var(--gold);margin-bottom:12px}
+.tut-row{display:flex;align-items:flex-start;gap:9px;font-size:12px;line-height:1.55;color:var(--text);margin:9px 0}
+.tut-row b:first-child{flex:0 0 18px;height:18px;border-radius:50%;background:linear-gradient(180deg,#ffd24a,#ffb020);color:#241a00;display:flex;align-items:center;justify-content:center;font-size:11px}
+.t-hl{color:var(--gold)}
+.t-warn{color:#ff8c3a}
+.t-snow{color:#4dc3ff}
+.t-moon{color:#a06aff}
+.t-hana{color:#ff2d92}
+.tut-go{width:100%;margin-top:14px;font-size:15px;letter-spacing:3px}
 
 /* ---------- 击杀喷泉（鲁棒） ---------- */
 #drop-layer{position:absolute;left:50%;top:38%;width:0;height:0;z-index:60;pointer-events:none}
@@ -247,11 +266,8 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 .z-auto{margin-top:7px;font-size:11px;color:var(--muted);border:1px dashed var(--line);border-radius:8px;padding:4px 8px;display:inline-block}
 .z-auto.ok{color:var(--green);border-color:rgba(63,224,138,.4);background:rgba(63,224,138,.08)}
 .zone-sec{margin-bottom:14px}
-.zone-head{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--gold);text-align:center;letter-spacing:3px;font-weight:700;padding:8px 0 10px;border-bottom:1px solid var(--line);margin-bottom:12px;cursor:pointer;user-select:none}
-.zone-head:active{opacity:.7}
-.zh-arrow{font-size:10px;color:var(--gold);letter-spacing:0}
-.zone-sec-body{display:none}
-.zone-sec-body.open{display:block}
+.zone-head{font-size:12px;color:var(--gold);text-align:center;letter-spacing:3px;font-weight:700;padding:8px 0 10px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.zone-sec-body{display:block}
 .p-stats{position:relative;z-index:3;text-align:center;font-size:12px;color:var(--text);margin:14px auto 2px;line-height:1.7;background:rgba(13,19,34,.6);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:12px;padding:9px 14px;width:min(92%,360px)}
 .p-stats b{color:var(--gold)}
 .menu-actions{position:relative;z-index:3;text-align:center;padding:4px 0 6px}
@@ -357,6 +373,15 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 .fv-btn{min-width:200px;padding:14px 0;font-size:16px;letter-spacing:2px}
 .fv-btn.disabled{filter:grayscale(.8) brightness(.6);box-shadow:none}
 .fv-btn:disabled{cursor:not-allowed}
+.fv-mats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:min(92%,360px);margin:6px auto 0;padding-bottom:8px}
+.fm{display:flex;align-items:center;justify-content:center;gap:4px;font-size:11px;background:rgba(13,19,34,.6);border:1px solid var(--line);border-radius:8px;padding:6px 2px;color:var(--text)}
+.fm b{color:var(--gold)}
+.fm.none{opacity:.45}
+.fm.none b{color:var(--muted)}
+.fv-coll{display:flex;align-items:center;justify-content:center;gap:8px;width:min(92%,360px);margin:8px auto 0;padding-bottom:10px}
+.fc-label{font-size:11.5px;color:var(--gold);font-weight:700;letter-spacing:1px}
+.fc-chip{font-size:10.5px;color:var(--text-dim);background:rgba(13,19,34,.6);border:1px solid var(--line);border-radius:99px;padding:3px 10px;white-space:nowrap}
+.fc-chip.got{color:var(--green);border-color:rgba(63,224,138,.45);background:rgba(63,224,138,.08)}
 .shop-note{position:relative;z-index:3;width:min(92%,360px);margin:10px auto 0;text-align:center;font-size:11px;color:var(--muted);line-height:1.6;background:rgba(13,19,34,.6);border:1px solid var(--line);border-radius:12px;padding:8px 12px}
 .shop-item{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .shop-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none}
@@ -402,3 +427,5 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:-apple
 .sk-chip{font-size:10.5px;font-weight:600;letter-spacing:.5px;border-radius:99px;padding:2px 8px;border:1px solid var(--line-gold);color:var(--gold);white-space:nowrap}
 .sk-chip.off{border-color:var(--line);color:var(--dim)}
 .sk-eff{color:var(--text-dim);line-height:1.4}
+.sk-item.psv{border-left-color:#a06aff}
+.sk-item.psv .sk-head{color:#cfa6ff}

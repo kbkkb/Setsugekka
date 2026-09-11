@@ -10,9 +10,9 @@ const P = {
   ...JSON.parse(JSON.stringify(PLAYER_BASE)),
   hp: PLAYER_BASE.maxHp,
   def: 0,
-  buf: '',              // 连段输入缓冲 "1"/"11"/"12"
-  bufUntil: 0,          // 缓冲超时时间戳
-  stage: { 1:0, 2:0 },  // 按钮轮换阶段
+  buf: '',              // 连段输入链（印记归属：111/122/13）
+  bufUntil: 0,          // 链超时时间戳
+  flags: { A:0, B:0, C:0 }, // 连击条件（FF14 式 flag，值为过期时间戳）
   seals: { snow:false, moon:false, hana:false },
   gcdUntil: 0,
   gcdTotal: 1,
@@ -26,7 +26,6 @@ const P = {
   qiCdUntil: 0, qiCdTotal: 1,      // 一闪独立冷却
   buffCdUntil: 0, buffCdTotal: 1,  // 战意独立冷却
   casting: null,          // 咏唱中 {action, until, total}
-  chiUntil: 0,            // 「势」结束时间（连击资源）
   zsUntil: 0,             // 锐锋 buff（+15%伤）
   cdBuffUntil: 0          // 迅疾 buff（GCD-10%）
 };
@@ -71,27 +70,34 @@ const Battle = {
   enter(encKey){
     const enc = ENCOUNTERS.find(x=>x.key===encKey);
     if(!enc) return;
-    const e = ENEMIES[encKey];
     E.key = encKey;
     E.enc = enc;
-    E.data = {
-      name: e.name,
-      maxHp: e.hp, hp: e.hp,
-      atk: e.atk, def: e.def,
-      exp: e.exp, gold: e.gold,
-      img: e.img, drops: e.drops||[],
-      interval: e.interval,
-      isBoss: !!e.isBoss,
-      castName: e.castName, castEvery: e.castEvery, castTime: e.castTime,
-      castDmgMul: e.castDmgMul
-    };
+    if(enc.kind==='arena'){
+      this.arenaIdx = 0;
+      this.arenaStart = Date.now();
+      E.data = this.arenaData(0);
+    } else {
+      const e = ENEMIES[encKey];
+      E.data = {
+        name: e.name,
+        maxHp: e.hp, hp: e.hp,
+        atk: e.atk, def: e.def,
+        exp: e.exp, gold: e.gold,
+        img: e.img, drops: e.drops||[],
+        interval: e.interval,
+        isBoss: !!e.isBoss,
+        castName: e.castName, castEvery: e.castEvery, castTime: e.castTime,
+        castDmgMul: e.castDmgMul
+      };
+    }
     E.casting = false;
-    E.nextCastAt = Date.now() + (e.castEvery || 4000);
+    E.nextCastAt = Date.now() + (E.data.castEvery || 4000);
     E.castEndAt = 0;
+    this.hideEnemyCast();
 
     P.hp = P.maxHp;
     P.buf = ''; P.bufUntil = 0;
-    P.stage[1] = 0; P.stage[2] = 0;
+    P.flags = { A:0, B:0, C:0 };
     P.seals = { snow:false, moon:false, hana:false };
     P.gcdUntil = 0;
     P.shieldUntil = 0;
@@ -102,7 +108,7 @@ const Battle = {
     P.ultFollowReady = false;
     P.qiCdUntil = 0; P.buffCdUntil = 0;
     P.casting = null;
-    P.chiUntil = 0; P.zsUntil = 0; P.cdBuffUntil = 0;
+    P.zsUntil = 0; P.cdBuffUntil = 0;
     this.hideCastBar();
     this.log = [];
     this.lastDrops = [];
@@ -117,11 +123,7 @@ const Battle = {
     if($('overlay')) $('overlay').classList.remove('show');
     this.hideDeathOverlay();
 
-    $('boss-name').textContent = E.data.name;
-    const blv = $('bossLv'); if(blv) blv.textContent = E.data.isBoss ? '首领' : '小怪';
-    const bh = $('boss-hp-text'); if(bh) bh.textContent = E.data.hp+'/'+E.data.maxHp;
-    $('enemy-img').src = E.data.img;
-    $('enemy-img').className = E.data.isBoss ? 'boss' : '';
+    this.paintEnemy();
     $('zoneName').textContent = enc.label;
     this.renderButtons();
     this.renderSeals();
@@ -129,25 +131,48 @@ const Battle = {
     this.renderFollow();
     this.renderHp();
 
-    this.startEnemyAttack();
     this.showScreen('battle-screen');
     // 通知界面层：隐藏顶部货币栏与底部导航（若定义了）
     if(window.onBattleEnter) window.onBattleEnter();
-    this.logPush('遭遇 <b style="color:var(--red)">'+E.data.name+'</b>');
+    // 新手指南：弹窗关闭逻辑每次入场都绑定（供「?」按钮复用），仅首场自动弹出
+    {
+      const pop = $('tut-pop'), go = $('tutGo');
+      if(pop && go){
+        go.onclick = ()=>{
+          const first = !P.tutDone;
+          if(first){ P.tutDone = true; if(window.saveGame) saveGame(); }
+          pop.classList.remove('show');
+          this.startEnemyAttack();
+        };
+      }
+      if(!P.tutDone){
+        if(go) go.textContent = '开始战斗';
+        if(pop) pop.classList.add('show');
+      } else {
+        if(pop) pop.classList.remove('show');
+        this.startEnemyAttack();
+      }
+    }
   },
 
   startEnemyAttack(){
     this.stopEnemyAttack();
     E.attackTimer = setInterval(()=>{
       if(!this.active || !E.data || E.data.hp<=0) return;
+      if(this.tutShowing()) return;   // 提示弹窗暂停
       if(E.casting) return;
       const now = Date.now();
       let dmg = Math.max(1, Math.round(E.data.atk - P.def + Math.random()*4));
       if(now < P.shieldUntil){
-        // 格挡窗口内：成功减伤 +20 剑气
+        // 格挡窗口内：成功减伤（Lv15 被动剑气+20 · Lv30 被动铁壁回元 CD-50%）
         dmg = Math.max(1, Math.round(dmg*0.3));
-        P.qi = Math.min(QI_MAX, P.qi + QI_PER_BLOCK);
-        this.logPush('<span class="qi">🛡 减伤成功 -'+dmg+' · 剑气+'+QI_PER_BLOCK+'</span>');
+        let t = '🛡 减伤成功 -'+dmg;
+        if(P.level >= UNLOCK_LV.qiSrc){ P.qi = Math.min(QI_MAX, P.qi + QI_PER_BLOCK); t += ' · 剑气+'+QI_PER_BLOCK; }
+        if(P.level >= UNLOCK_LV.shieldCd && P.shieldCdUntil > now){
+          P.shieldCdUntil = Math.round(now + (P.shieldCdUntil-now)*0.5);
+          t += ' · 铁壁回元';
+        }
+        this.logPush('<span class="qi">'+t+'</span>');
         this.renderQi();
       } else {
         this.logPush('<span class="dmg-ene">'+E.data.name+' 攻击 → '+dmg+'</span>');
@@ -210,20 +235,21 @@ const Battle = {
       P.qiCdTotal = QISTRIKE.cd; P.qiCdUntil = now + QISTRIKE.cd;
       const dmg = this.calcDamage(QISTRIKE.dmgBase);
       E.data.hp = Math.max(0, E.data.hp - dmg);
-      this.logPush('<span class="qi">⚡ '+QISTRIKE.name+' → <b>'+dmg+'</b></span>');
-      this.floatDmg(dmg, false);
+      this.lifesteal(dmg);
+      this.logPush('<span class="qi">⚡ '+QISTRIKE.name+' → <b>'+dmg+'</b>'+(this.lastCrit?' <span class="win">💥</span>':'')+'</span>');
+      this.floatDmg(dmg, this.lastCrit);
       this.showSlashEffect(); this.flash(btn);
       this.renderQi();
       if(E.data.hp<=0){ this.onKill(); }
       return;
     }
 
-    // ---- 战意高扬：15s 伤害 +20%（独立冷却20s，不占公共GCD）----
+    // ---- 战意高扬：8s 伤害 +20%（Lv40 被动 10s；独立冷却20s，不占公共GCD）----
     if(action === 'buff'){
       if(now < P.buffCdUntil){ this.logPush('战意冷却中…'); return; }
-      P.buffUntil = now + WARCRY.durMs;
+      P.buffUntil = now + warcryDur();
       P.buffCdTotal = WARCRY.cd; P.buffCdUntil = now + WARCRY.cd;
-      this.logPush('<span class="warn">🔥 '+WARCRY.name+'：伤害+20%（15s）</span>');
+      this.logPush('<span class="warn">🔥 '+WARCRY.name+'：伤害+20%（'+warcryDur()/1000+'s）</span>');
       this.flash(btn);
       return;
     }
@@ -239,7 +265,7 @@ const Battle = {
       }
       P.seals = { snow:false, moon:false, hana:false };
       // 咏唱不中断连击：延长连击窗口
-      if(P.buf) P.bufUntil = now + COMBO_TIMEOUT;
+      if(P.buf) P.bufUntil = now + CHI_MS;
       // 冷却从咏唱开始时计算（而非咏唱结束时）
       this.setGcd(ULT.gcdMs);
       P.casting = { action:'ult', until: now + ULT.castMs, total: ULT.castMs };
@@ -263,10 +289,11 @@ const Battle = {
       }
       P.ultFollowReady = false;
       // 追斩不中断连招：延长连击窗口（与居合同理）
-      if(P.buf) P.bufUntil = now + COMBO_TIMEOUT;
-      const dmg = this.calcDamage(FOLLOW.dmgBase);
+      if(P.buf) P.bufUntil = now + CHI_MS;
+      const dmg = this.calcDamage(FOLLOW.dmgBase, false, 'special');
       E.data.hp = Math.max(0, E.data.hp - dmg);
-      this.logPush('<span class="dmg-you">'+FOLLOW.name+' → <b>'+dmg+'</b></span>');
+      this.lifesteal(dmg);
+      this.logPush('<span class="dmg-you">'+FOLLOW.name+' → <b>'+dmg+'</b>'+(this.lastCrit?' <span class="win">💥</span>':'')+'</span>');
       this.floatDmg(dmg, true);
       this.showSlashEffect(); this.flash(btn);
       this.setGcd(FOLLOW.gcdMs);
@@ -275,25 +302,18 @@ const Battle = {
       return;
     }
 
-    // ---- 普通轮换技（连招：条件 + 「势」加成 + 收尾结算）----
-    const hasChi = now < P.chiUntil;
-    let skill, st = null;
-    if(action==='1'){ st = P.stage[1]; skill = BTN1[st]; }
-    else if(action==='2'){ st = P.stage[2]; skill = BTN2[st]; }
-    else { skill = BTN3; }
-
-    // 释放条件：非起手技需要「势」（由 1-1「斩」赋予）
-    if(skill.needChi && !hasChi){
-      if(action==='1') P.stage[1] = 0;
-      if(action==='2') P.stage[2] = 0;
-      this.renderButtons();
-      this.logPush('<span class="warn">需先以「斩」起手获得「势」</span>');
+    // ---- 连招（FF14 flag 制：req 消耗 / set 给予，支线互斥） ----
+    const sel = this.nextAction(action);
+    if(!sel){
+      this.logPush('<span class="warn">「'+this.actionName(action)+'」需连击条件「'+COMBO_FLAGS.A+'」——先按「斩」起手</span>');
       return; // 不消耗 GCD
     }
+    const skill = sel.skill, st = sel.st;
+    this.applyFlags(skill, now);
 
-    // 连段缓冲（路线判定，供提示与轮换复位）
+    // 连击链缓冲（印记归属 111/122/13；窗口与 flag 同步 30s）
     P.buf = P.buf + action;
-    P.bufUntil = now + COMBO_TIMEOUT;
+    P.bufUntil = now + CHI_MS;
     // 完整路线打完立即清空，避免残留 buf 吃掉下一轮起手
     if(COMBO_ROUTES.some(r=>r.seq===P.buf)){
       P.buf = '';
@@ -301,24 +321,26 @@ const Battle = {
       P.buf = ''; // 无效输入链清空
     }
 
-    // 伤害（有「势」时 +50%）
-    const dmg = this.calcDamage(skill.mult, hasChi && !!skill.needChi);
+    // 伤害（flag 为纯连击条件，无增伤；收益来自段倍率与收招 buff）
+    const dmg = this.calcDamage(skill.mult, false, 'combo');
     E.data.hp = Math.max(0, E.data.hp - dmg);
-    this.floatDmg(dmg, false);
-    const chiTag = (skill.needChi && hasChi) ? '<span class="qi">⚡势+50%</span> ' : '';
-    this.logPush('<span class="dmg-you">'+skill.name+' → <b>'+dmg+'</b> '+chiTag+'</span>');
+    this.lifesteal(dmg);
+    this.floatDmg(dmg, this.lastCrit);
+    this.logPush('<span class="dmg-you">'+skill.name+' → <b>'+dmg+'</b>'+(this.lastCrit?' <span class="win">💥</span>':'')+'</span>');
 
     // 效果结算
-    if(action==='1' && st===0){
-      // 1-1 起手：获得/刷新「势」
-      P.chiUntil = now + CHI_MS;
-      this.logPush('<span class="muted">「势」涌动（后续连段 +50%）</span>');
+    if(skill.set){
+      this.logPush('<span class="muted">连击条件「'+COMBO_FLAGS[skill.set]+'」已备好（'+CHI_MS/1000+'s）</span>');
     }
     if(skill.seal){
-      // 收尾技：印记 + 剑气 + 附加buff
+      // 收招技：印记 + 剑气（Lv15 被动·剑心激活）+ 附加buff
       P.seals[skill.seal] = true;
-      P.qi = Math.min(QI_MAX, P.qi + QI_PER_SEAL);
-      this.logPush('<span class="warn">印「'+({snow:'雪 ❆',moon:'月 ☾',hana:'花 ❀'})[skill.seal]+'」凝聚 · 剑气+'+QI_PER_SEAL+'</span>');
+      let qiGain = '';
+      if(P.level >= UNLOCK_LV.qiSrc){
+        P.qi = Math.min(QI_MAX, P.qi + QI_PER_SEAL);
+        qiGain = ' · 剑气+'+QI_PER_SEAL;
+      }
+      this.logPush('<span class="warn">印「'+({snow:'雪 ❆',moon:'月 ☾',hana:'花 ❀'})[skill.seal]+'」凝聚'+qiGain+'</span>');
       if(skill.buff){
         if(skill.buff.key==='zs'){ P.zsUntil = now + skill.buff.durMs; }
         else { P.cdBuffUntil = now + skill.buff.durMs; }
@@ -328,13 +350,9 @@ const Battle = {
       this.renderQi();
     }
 
-    // 轮换推进（仅在成功释放后）
-    if(action==='1') P.stage[1] = (st+1)%BTN1.length;
-    if(action==='2') P.stage[2] = (st+1)%BTN2.length;
-
     this.showSlashEffect(); this.flash(btn);
     this.setGcd(GCD_MS);
-    this.restoreStages();
+    this.renderButtons();
 
     if(E.data.hp<=0){ this.onKill(); } else this.renderHp();
   },
@@ -360,27 +378,31 @@ const Battle = {
     const lockTag = k => P.level < UNLOCK_LV[k] ? ' <span class="st-lock">🔒 未解锁</span>' : '';
     const map = {
       '1': ()=>{
-        const s = BTN1[P.stage[1]];
-        const nm = ['1-1 斩','1-2 斩·贰','1-3 斩·叁'][P.stage[1]];
-        const req = P.stage[1]===0 ? '无（连招起手）' : '「势」持续中（先按「斩」起手）';
-        const bonus = P.stage[1]===0
-          ? '获得「势」'+CHI_MS/1000+'s：后续连段技伤害+'+Math.round(CHI_BONUS*100)+'%'
-          : (s.seal ? '凝聚雪❆印 · 剑气+'+QI_PER_SEAL+' · 锐锋（+15%伤害 30s）' : '延续连段，指向雪❆印');
+        const sel = this.nextAction('1') || {st:0};
+        const s = BTN1[sel.st];
+        const qiT = P.level>=UNLOCK_LV.qiSrc ? ' · 剑气+'+QI_PER_SEAL : '';
+        const nm = ['1-1 斩','1-2 斩·贰','1-3 斩·叁'][sel.st];
+        const req = ['无（唯一起手技）','需连击条件「势」（1-1 给予，本段消耗它）','需连击条件「续势」（1-2 给予，本段消耗它）'][sel.st];
+        const bonus = sel.st===0
+          ? '成功后给予连击条件「势」'+CHI_MS/1000+'s → 可接 1-2 / 2-1 / 3-1（三选一，消耗互斥）'
+          : (sel.st===1 ? '成功后给予连击条件「续势」→ 可接 1-3' : '收招凝聚雪❆印'+qiT+' · 锐锋（+15%伤害 30s）');
         return { name:nm, lv:lvTxt('b1'), lock:lockTag('b1'), req:req,
-                 effect:'造成 '+chiTxt(s.mult)+' 伤害（共享GCD '+GCD_MS+'ms）', bonus:bonus };
+                 effect:'造成 '+pct(s.mult)+' 伤害（共享GCD '+GCD_MS+'ms）', bonus:bonus };
       },
       '2': ()=>{
-        const s = BTN2[P.stage[2]];
-        const nm = ['2-1 突','2-2 扫'][P.stage[2]];
-        const req = '「势」持续中（先按「斩」起手）';
-        const bonus = s.seal ? '凝聚月☾印 · 剑气+'+QI_PER_SEAL+' · 迅疾（GCD-10% 30s）' : '延续连段，指向月☾印';
+        const sel = this.nextAction('2') || {st:0};
+        const s = BTN2[sel.st];
+        const qiT = P.level>=UNLOCK_LV.qiSrc ? ' · 剑气+'+QI_PER_SEAL : '';
+        const nm = ['2-1 突','2-2 扫'][sel.st];
+        const req = sel.st===0 ? '需连击条件「势」（1-1 给予，本段消耗它）' : '需连击条件「锐势」（2-1 给予，本段消耗它）';
+        const bonus = s.seal ? '收招凝聚月☾印'+qiT+' · 迅疾（GCD-10% 30s）' : '成功后给予连击条件「锐势」→ 可接 2-2';
         return { name:nm, lv:lvTxt('b2'), lock:lockTag('b2'), req:req,
-                 effect:'造成 '+chiTxt(s.mult)+' 伤害（共享GCD '+GCD_MS+'ms）', bonus:bonus };
+                 effect:'造成 '+pct(s.mult)+' 伤害（共享GCD '+GCD_MS+'ms）', bonus:bonus };
       },
       '3': ()=>({ name:'3-1 斩落', lv:lvTxt('b3'), lock:lockTag('b3'),
-                 req:'「势」持续中（最快成印路线：斩→斩落）',
-                 effect:'造成 '+chiTxt(BTN3.mult)+' 伤害（共享GCD '+GCD_MS+'ms）',
-                 bonus:'凝聚花❀印 · 剑气+'+QI_PER_SEAL }),
+                 req:'需连击条件「势」（1-1 给予，本段消耗它）· 最短成印路线',
+                 effect:'造成 '+pct(BTN3.mult)+' 伤害（共享GCD '+GCD_MS+'ms）',
+                 bonus:'收招凝聚花❀印'+(P.level>=UNLOCK_LV.qiSrc? ' · 剑气+'+QI_PER_SEAL : '') }),
       'ult': ()=>({ name:ULT.name, lv:lvTxt('ult'), lock:lockTag('ult'),
                  req:'三印齐（雪❆ 月☾ 花❀）；咏唱期间封锁其他GCD技',
                  effect:'咏唱 '+ULT.castMs/1000+'s 后造成 攻击力×'+pct(ULT.dmgBase)+'（冷却自咏唱开始计算）',
@@ -399,7 +421,7 @@ const Battle = {
                  bonus:'可在两个GCD技能的等待间隙插入补伤' }),
       'buff': ()=>({ name:WARCRY.name, lv:lvTxt('buff'), lock:lockTag('buff'),
                  req:'独立冷却 '+WARCRY.cd/1000+'s（不占公共GCD）',
-                 effect:'持续 '+WARCRY.durMs/1000+'s：造成的伤害+'+Math.round((WARCRY.dmgMul-1)*100)+'%',
+                 effect:'持续 '+warcryDur()/1000+'s：造成的伤害+'+Math.round((WARCRY.dmgMul-1)*100)+'%',
                  bonus:'激活期间按钮橙光提示；与其他加成乘算叠加' })
     };
     return (map[action]||(()=>({name:this.actionName(action),lv:'-',req:'-',effect:'-',bonus:'-'})))();
@@ -423,20 +445,10 @@ const Battle = {
     if(el) el.classList.remove('show');
   },
 
-  // 连招键当前是否真的可以释放（自动战斗用，含自救复位）
+  // 连招键当前是否真的可以释放（自动战斗用：flag 推导即可）
   comboReady(c){
     if(P.level < UNLOCK_LV['b'+c]) return false;
-    const arr = c==='1' ? BTN1 : c==='2' ? BTN2 : null;
-    let s = arr ? arr[c==='1'?P.stage[1]:P.stage[2]] : BTN3;
-    if(s.needChi && Date.now() >= P.chiUntil){
-      if(!arr) return false;
-      // 复位到起手技后再判断
-      if(arr===BTN1) P.stage[1]=0; else P.stage[2]=0;
-      this.renderButtons();
-      s = arr[0];
-      if(s.needChi && Date.now() >= P.chiUntil) return false;
-    }
-    return true;
+    return !!this.nextAction(c);
   },
 
   // 咏唱完成结算：大招伤害在此生效
@@ -446,10 +458,11 @@ const Battle = {
     this.hideCastBar();
     if(!c || !this.active || !E.data || E.data.hp<=0) return;
     if(c.action === 'ult'){
-      const dmg = this.calcDamage(ULT.dmgBase); // 倍率刻度统一：dmgBase 60 → 攻击力×6
+      const dmg = this.calcDamage(ULT.dmgBase, false, 'special'); // 倍率刻度统一：dmgBase 60 → 攻击力×6
       E.data.hp = Math.max(0, E.data.hp - dmg);
+      this.lifesteal(dmg);
       P.ultFollowReady = true; // 解锁后续技「追斩」
-      this.logPush('<span class="warn big">❄☾❀ 居合·雪月花 → <b>'+dmg+'</b>　▸ 可接「'+FOLLOW.name+'」</span>');
+      this.logPush('<span class="warn big">❄☾❀ 居合·雪月花 → <b>'+dmg+'</b>'+(this.lastCrit?' 💥':'')+'　▸ 可接「'+FOLLOW.name+'」</span>');
       this.floatDmg(dmg, true);
       this.showSlashEffect();
       this.renderQi(); this.renderFollow();
@@ -462,9 +475,25 @@ const Battle = {
     if(cb) cb.classList.remove('show');
   },
 
-  // 倍率伤害：总攻击力 × 技能倍率 × 「势」加成 × buff 加成
-  // mult 为百分比倍率（如 130 表示 ×1.3）
-  calcDamage(mult, useChi){
+  // ---------- 敌人技能读条 ----------
+  showEnemyCast(name){
+    const b = $('enemyCastBar'); if(b) b.classList.add('show');
+    const t = $('enemyCastText'); if(t) t.textContent = name;
+    const f = $('enemyCastFill'); if(f) f.style.width = '0%';
+  },
+  hideEnemyCast(){
+    const b = $('enemyCastBar'); if(b) b.classList.remove('show');
+  },
+
+  // 提示弹窗是否打开（打开即战场暂停）
+  tutShowing(){
+    const p = $('tut-pop');
+    return !!(p && p.classList.contains('show'));
+  },
+
+  // 倍率伤害：总攻击力 × 技能倍率 × 「势」加成 × buff 加成 × 被动 × 暴击
+  // mult 为百分比倍率（如 130 表示 ×1.3）；kind: 'combo'连招 | 'special'居合/追斩
+  calcDamage(mult, useChi, kind){
     const w = WEAPONS.find(x=>x.id===P.weapon);
     const atk = P.atk + weaponAtk(P.weapon);
     const now = Date.now();
@@ -472,16 +501,34 @@ const Battle = {
     if(useChi) m *= (1 + CHI_BONUS);          // 「势」+50%
     if(now < P.buffUntil) m *= WARCRY.dmgMul; // 战意高扬 +20%
     if(now < P.zsUntil)   m *= BUFF_ZS_DMG;   // 锐锋 +15%
+    if(kind==='combo'){                        // 被动：连招增伤 Lv13/Lv35 各+20%（乘算）
+      if(P.level >= UNLOCK_LV.atkUp1) m *= 1 + COMBO_UP;
+      if(P.level >= UNLOCK_LV.atkUp2) m *= 1 + COMBO_UP;
+    }
+    if(kind==='special' && P.level >= UNLOCK_LV.specUp) m *= SPECIAL_UP; // Lv45 居合/追斩+50%
+    this.lastCrit = Math.random() < CRIT_CHANCE;  // 所有攻击技能 30% 暴击 ×2
+    if(this.lastCrit) m *= CRIT_MUL;
     return Math.max(1, Math.round(atk * m * (0.9+Math.random()*0.2)) - E.data.def);
+  },
+
+  // 被动吸血：Lv17 → 1%，Lv50 → 5%
+  lifesteal(dmg){
+    const r = P.level>=UNLOCK_LV.leech2 ? 0.05 : (P.level>=UNLOCK_LV.leech1 ? 0.01 : 0);
+    if(r<=0 || !(dmg>0) || P.hp<=0 || P.hp>=P.maxHp) return;
+    P.hp = Math.min(P.maxHp, P.hp + Math.max(1, Math.round(dmg*r)));
+    this.renderHp();
   },
 
   // ------ Boss 反制 ------
   onCounter(){
-    const dmg = Math.max(1, Math.round((P.atk+20) * 3));
+    let dmg = Math.max(1, Math.round((P.atk+20) * 3));
+    this.lastCrit = Math.random() < CRIT_CHANCE;
+    if(this.lastCrit) dmg = Math.round(dmg * CRIT_MUL);
     E.data.hp = Math.max(0, E.data.hp - dmg);
+    this.lifesteal(dmg);
     E.casting = false;
     E.nextCastAt = Date.now() + (E.data.castEvery||4000);
-    this.logPush('<span class="dmg-you">⟲ 反制「'+E.data.castName+'」 → <b>'+dmg+'</b></span>');
+    this.logPush('<span class="dmg-you">⟲ 反制「'+E.data.castName+'」 → <b>'+dmg+'</b>'+(this.lastCrit?' <span class="win">💥</span>':'')+'</span>');
     this.showSlashEffect();
     if(E.data.hp<=0){ this.onKill(); } else this.renderHp();
   },
@@ -493,8 +540,13 @@ const Battle = {
     // 击杀计数（解锁首领 / 解锁下一区域）
     if(E.data.isBoss){ P.bossKills[E.key]=(P.bossKills[E.key]||0)+1; }
     else             { P.kills[E.key]=(P.kills[E.key]||0)+1; }
-    while(P.exp >= expForLevel(P.level) && P.level < LEVEL_CAP){ P.level++; P.atk += 3; P.maxHp += 15; }
+    const oldLv = P.level;
+    while(P.exp >= expForLevel(P.level) && P.level < levelCap()){ P.level++; P.atk += 3; P.maxHp += 15; }
     this.logPush('<span class="win">击杀 '+E.data.name+'</span>');
+    if(P.level > oldLv){
+      const u = unlockNames(oldLv, P.level);
+      if(u.length) this.logPush('<span class="win">🆕 升级解锁 ▸ '+u.join(' / ')+'</span>');
+    }
     // 掉落入账
     const drops = [];
     E.data.drops.forEach(d=>{
@@ -523,7 +575,9 @@ const Battle = {
   // 敌人消逝 + 材料喷泉（不弹结算窗）
   dieEffect(){
     const main = $('enemy-sprite');
-    if(main) main.classList.add('dying');
+    if(main){ main.classList.add('dying'); main.classList.remove('casting'); }
+    E.casting = false; E.castEndAt = 0;   // 死亡时中断读条，防止 hp>0 门槛让 tick 永不重置
+    this.hideEnemyCast();
     const kb = $('kill-burst');
     if(kb){ kb.classList.remove('go'); void kb.offsetWidth; kb.classList.add('go'); }
     const layer = $('drop-layer');
@@ -570,7 +624,29 @@ const Battle = {
     if($('enemy-sprite')) $('enemy-sprite').classList.remove('dying');
     if($('kill-burst')) $('kill-burst').classList.remove('go');
     const dl = $('drop-layer'); if(dl) dl.innerHTML = '';
-    E.data.hp = E.data.maxHp;
+    if(E.data && E.data.arena){
+      if(this.arenaIdx < ARENA_SEQUENCE.length-1){
+        this.arenaIdx++;
+        E.data = this.arenaData(this.arenaIdx);
+        this.paintEnemy();
+        this.logPush('<span class="warn">▸ 第 '+(this.arenaIdx+1)+'/4 战「'+E.data.name+'」开始</span>');
+      } else {
+        const t = Date.now() - this.arenaStart;
+        const rec = !P.arenaBest || t < P.arenaBest;
+        if(rec){ P.arenaBest = t; if(window.saveGame) saveGame(); }
+        this.logPush('<span class="win">🏆 四王连战通关 · 用时 '+fmtTime(t)+(rec? ' ✦ 新纪录！' : '（最佳 '+fmtTime(P.arenaBest)+'）')+'</span>');
+        if(!P.arenaFirst){
+          P.arenaFirst = true; P.crystal += ARENA_FIRST_REWARD;
+          if(window.saveGame) saveGame();
+          this.logPush('<span class="win">💎 首通奖励已发放：◆×'+ARENA_FIRST_REWARD+'</span>');
+        }
+        this.arenaIdx = 0; this.arenaStart = Date.now();
+        E.data = this.arenaData(0);
+        this.paintEnemy();
+      }
+    } else {
+      E.data.hp = E.data.maxHp;
+    }
     E.casting = false;
     E.nextCastAt = Date.now() + (E.data.castEvery || 4000);
     E.castEndAt = 0;
@@ -578,8 +654,32 @@ const Battle = {
     this.renderButtons();
     this.renderSeals();
     this.startEnemyAttack();
-    this.logPush('<span class="muted">'+E.data.name+' 又出现了…</span>');
+    if(!(E.data && E.data.arena)) this.logPush('<span class="muted">'+E.data.name+' 又出现了…</span>');
     this.renderHp();
+  },
+
+  // 重绘敌人立绘/名牌（竞技场换阶段时复用）
+  paintEnemy(){
+    $('boss-name').textContent = E.data.name;
+    const blv = $('bossLv'); if(blv) blv.textContent = E.data.isBoss ? '首领' : '小怪';
+    const bh = $('boss-hp-text'); if(bh) bh.textContent = E.data.hp+'/'+E.data.maxHp;
+    const im = $('enemy-img'); if(im){ im.src = E.data.img; im.className = E.data.isBoss ? 'boss' : ''; }
+  },
+
+  // 竞技场：四王强化版数据（HP×2.6 攻×1.25，材料照常掉落）
+  arenaData(i){
+    const b = ENEMIES[ARENA_SEQUENCE[i]];
+    const hp = Math.round(b.hp * ARENA_MULT.hp);
+    return {
+      name: '觉醒·'+b.name,
+      maxHp: hp, hp: hp,
+      atk: Math.round(b.atk * ARENA_MULT.atk), def: Math.round(b.def * 1.3),
+      exp: Math.round(b.exp * 1.5), gold: Math.round(b.gold * 1.5),
+      img: b.img, drops: b.drops||[], interval: b.interval,
+      isBoss: true,
+      castName: b.castName, castEvery: b.castEvery, castTime: b.castTime, castDmgMul: b.castDmgMul,
+      arena: true
+    };
   },
 
   onDeath(){
@@ -591,6 +691,7 @@ const Battle = {
     this.hideCastBar();
     if(E.data){ E.casting = false; E.castEndAt = 0; }
     const es = $('enemy-sprite'); if(es) es.classList.remove('casting');
+    this.hideEnemyCast();
     this.showDeathOverlay();
     this._respawnTimer && clearTimeout(this._respawnTimer);
     const self = this;
@@ -630,7 +731,7 @@ const Battle = {
     // --- 重置玩家战斗状态（连段/印记/剑气/buff/咏唱全清，HP 回满）---
     P.hp = P.maxHp;
     P.buf = ''; P.bufUntil = 0;
-    P.stage[1] = 0; P.stage[2] = 0;
+    P.flags = { A:0, B:0, C:0 };
     P.seals = { snow:false, moon:false, hana:false };
     P.gcdUntil = 0; P.gcdTotal = 1;
     P.shieldUntil = 0; P.shieldCdUntil = 0;
@@ -641,12 +742,13 @@ const Battle = {
     P.qiCdUntil = 0; P.qiCdTotal = 1;
     P.buffCdUntil = 0; P.buffCdTotal = 1;
     P.casting = null;
-    P.chiUntil = 0; P.zsUntil = 0; P.cdBuffUntil = 0;
+    P.zsUntil = 0; P.cdBuffUntil = 0;
     // --- 重置敌人状态（回满血、清读条、重置施法计时）---
     E.data.hp = E.data.maxHp;
     E.casting = false; E.castEndAt = 0;
     E.nextCastAt = Date.now() + (E.data.castEvery || 4000);
     const es = $('enemy-sprite'); if(es) es.classList.remove('dying','casting');
+    this.hideEnemyCast();
     if($('kill-burst')) $('kill-burst').classList.remove('go');
     const dl = $('drop-layer'); if(dl) dl.innerHTML = '';
     // --- 重新开战 ---
@@ -660,6 +762,25 @@ const Battle = {
   // ---------- 循环帧 ----------
   tick(){
     const now = Date.now();
+
+    // 提示弹窗打开 = 战场暂停：顺延所有敌方计时器并跳过本帧
+    if(this.tutShowing()){
+      E.nextCastAt += TICK_MS;
+      if(E.casting) E.castEndAt += TICK_MS;
+      if(P.casting) P.casting.until += TICK_MS;
+      if(E.enc && E.enc.kind==='arena' && this.arenaStart) this.arenaStart += TICK_MS; // 连战计时同步冻结
+      return;
+    }
+
+    // 竞技场计时器（顶部 HUD）
+    const tm = $('hud-timer');
+    if(tm){
+      const inArena = E.enc && E.enc.kind==='arena' && this.active && E.data;
+      if(inArena){
+        tm.style.display = '';
+        tm.textContent = '⏱ '+fmtTime(now - this.arenaStart)+' · 第'+(this.arenaIdx+1)+'/4战';
+      } else tm.style.display = 'none';
+    }
 
     // 咏唱读条推进 + 咏唱完成结算
     if(P.casting){
@@ -686,14 +807,12 @@ const Battle = {
 
     if(!this.active) return;
 
-    // 连段缓冲超时
+    // 连击链超时（A/B/C flag 各自自然过期，无需手动复位）
     if(P.buf && now > P.bufUntil){ P.buf=''; }
+    // 按钮文本/色相由 flag 实时派生
+    this.renderButtons();
 
-    // 「势」过期 = 连击中断：按钮轮换复位到第一段（图标/角标恢复初始）
-    if(P.chiUntil && now >= P.chiUntil && (P.stage[1]!==0 || P.stage[2]!==0)){
-      P.stage[1] = 0; P.stage[2] = 0;
-      this.renderButtons();
-    }
+    // 「势」只作为 2-x/3-x 派生技的入场券（30s）；段数复位已改由连击窗口超时驱动
 
     // 下一步提示（黄色虚线；未解锁按钮不提示）
     const next = this.nextHints();
@@ -718,6 +837,18 @@ const Battle = {
     const ready = P.seals.snow && P.seals.moon && P.seals.hana;
     if(b4){ b4.classList.toggle('ult-ready', ready && P.level>=UNLOCK_LV.ult); }
 
+    // 条件不满足 → 置灰不可点（仅对已解锁技能生效；未解锁保留点击提示解锁等级）
+    const setCond = (b, off)=>{
+      if(!b) return;
+      b.disabled = off;
+      b.classList.toggle('cond-off', off);
+    };
+    setCond($('btnSkill6'), P.level>=UNLOCK_LV.qi && P.qi < QISTRIKE.qiCost);
+    setCond($('btnSkill8'), P.level>=UNLOCK_LV.follow && !P.ultFollowReady);
+    setCond(b4, P.level>=UNLOCK_LV.ult && !ready);
+    setCond($('btnSkill2'), P.level>=UNLOCK_LV.b2 && !this.hasFlag('A') && !this.hasFlag('C'));
+    setCond($('btnSkill3'), P.level>=UNLOCK_LV.b3 && !this.hasFlag('A'));
+
     // buff 持续角标（锐锋/迅疾）
     const cz = $('chipZs');
     if(cz){
@@ -736,15 +867,21 @@ const Battle = {
     if(E.data && E.data.isBoss && E.data.hp>0){
       if(!E.casting && now >= E.nextCastAt){
         E.casting = true;
-        E.castEndAt = now + (E.data.castTime||1500);
+        E.castTotal = E.data.castTime || 1500;
+        E.castEndAt = now + E.castTotal;
         $('enemy-sprite').classList.add('casting');
+        this.showEnemyCast(E.data.castName);
         this.logPush('<span class="warn">'+E.data.name+' 读条「'+E.data.castName+'」！格挡反制！</span>');
       } else if(E.casting && now >= E.castEndAt){
         E.casting = false;
         E.nextCastAt = now + (E.data.castEvery||4000);
         $('enemy-sprite').classList.remove('casting');
+        this.hideEnemyCast();
         if(now < P.shieldUntil){
-          P.qi = Math.min(QI_MAX, P.qi + QI_PER_BLOCK); // 反制成功也积累剑气
+          if(P.level >= UNLOCK_LV.qiSrc){ P.qi = Math.min(QI_MAX, P.qi + QI_PER_BLOCK); } // 反制成功也积累剑气（Lv15 被动）
+          if(P.level >= UNLOCK_LV.shieldCd && P.shieldCdUntil > now){
+            P.shieldCdUntil = Math.round(now + (P.shieldCdUntil-now)*0.5); // 铁壁回元
+          }
           this.renderQi();
           this.onCounter();
         }
@@ -755,6 +892,9 @@ const Battle = {
           if(P.hp<=0){ this.onDeath(); return; }
         }
         this.renderHp();
+      } else if(E.casting){
+        const f = $('enemyCastFill');
+        if(f) f.style.width = Math.min(100, Math.max(0, (1-(E.castEndAt-now)/E.castTotal)*100))+'%';
       }
     }
 
@@ -762,17 +902,40 @@ const Battle = {
     if(this.auto){ this.autoAction(); }
   },
 
-  // 当前缓冲下，哪些按钮可以继续连段（起手不提示；未解锁按钮不提示）
+  // ---------- FF14 式连击条件（flag）引擎 ----------
+  hasFlag(f){ return Date.now() < (P.flags[f] || 0); },
+  // 按当前 flag 推导该键此刻释放的段（null = 条件不足不可放）
+  nextAction(action){
+    if(action==='1'){
+      if(this.hasFlag('B')) return { st:2, skill:BTN1[2] };
+      if(this.hasFlag('A')) return { st:1, skill:BTN1[1] };
+      return { st:0, skill:BTN1[0] };               // 1-1 起手永远可放
+    }
+    if(action==='2'){
+      if(this.hasFlag('C')) return { st:1, skill:BTN2[1] };
+      if(this.hasFlag('A')) return { st:0, skill:BTN2[0] };
+      return null;
+    }
+    if(action==='3') return this.hasFlag('A') ? { st:0, skill:BTN3 } : null;
+    return null;
+  },
+  // 消耗前置条件，给予新条件（支线互斥，不会错乱）
+  applyFlags(skill, now){
+    if(skill.req) P.flags[skill.req] = 0;
+    if(skill.set) P.flags[skill.set] = now + CHI_MS;
+  },
+
+  // 当前可连击的按键提示（st>0 才算连段延续；未解锁不提示）
   nextHints(){
-    if(!P.buf) return [];
-    const set = [];
-    COMBO_ROUTES.forEach(r=>{
-      if(r.seq.length > P.buf.length && r.seq.slice(0,P.buf.length)===P.buf){
-        const c = r.seq[P.buf.length];
-        if(set.indexOf(c)<0 && P.level >= UNLOCK_LV['b'+c]) set.push(c);
-      }
+    const lvk = { '1':'b1', '2':'b2', '3':'b3' };
+    const out = [];
+    ['1','2','3'].forEach(c=>{
+      if(P.level < UNLOCK_LV[lvk[c]]) return;
+      const s = this.nextAction(c);
+      // 按钮1 仅连段中提示（起手技常驻不高亮）；派生键只要有条件就提示
+      if(s && (c==='1' ? s.st > 0 : true)) out.push(c);
     });
-    return set;
+    return out;
   },
 
   setSweep(el, frac){
@@ -791,18 +954,11 @@ const Battle = {
     const i1 = $('icon1'), b1 = $('badge1'), l1 = $('label1');
     const i2 = $('icon2'), b2 = $('badge2'), l2 = $('label2');
     const i3 = $('icon3'), l3 = $('label3');
-    if(i1){ i1.style.filter = TINTS[P.stage[1]]; b1.textContent=BADGES[P.stage[1]]; l1.textContent=BTN1[P.stage[1]].name; }
-    if(i2){ i2.style.filter = TINTS[P.stage[2]]; b2.textContent=BADGES[P.stage[2]]; l2.textContent=BTN2[P.stage[2]].name; }
-    if(i3){ i3.style.filter = ''; l3.textContent=BTN3.name; }
-  },
-
-  // 连击后恢复：未参与当前连击链的按钮回到一阶段技能
-  // 只有 1/2/3 改变连击；大招/格挡不经过这里，故不会中断连击
-  restoreStages(){
-    const next = this.nextHints();
-    if(!P.buf || next.indexOf('1')<0) P.stage[1]=0;
-    if(!P.buf || next.indexOf('2')<0) P.stage[2]=0;
-    this.renderButtons();
+    const s1 = this.nextAction('1'), s2 = this.nextAction('2');
+    const st1 = s1?s1.st:0, st2 = s2?s2.st:0;
+    if(i1){ i1.style.filter = TINTS[st1]; b1.textContent=BADGES[st1]; l1.textContent=BTN1[st1].name; }
+    if(i2){ i2.style.filter = TINTS[st2]; b2.textContent=BADGES[st2]; l2.textContent=BTN2[st2].name + (s2? '' : '·待势'); }
+    if(i3){ i3.style.filter = ''; l3.textContent=BTN3.name + (this.hasFlag('A')? '' : '·待势'); }
   },
 
   renderSeals(){
@@ -810,16 +966,17 @@ const Battle = {
     $('sealSnow').classList.toggle('lit-snow', s.snow);
     $('sealMoon').classList.toggle('lit-moon', s.moon);
     $('sealHana').classList.toggle('lit-hana', s.hana);
-    const n = (s.snow?1:0)+(s.moon?1:0)+(s.hana?1:0);
-    $('sealTip').textContent = n===3 ? '居合可放！' : ('印 '+n+'/3');
   },
 
-  // 剑气条
+  // 剑气条（解锁「一闪」后才显示）
   renderQi(){
     P.qi = Math.max(0, Math.min(QI_MAX, P.qi));
-    const fill = $('qi-fill'), txt = $('qi-text');
+    const fill = $('qi-fill');
     if(fill) fill.style.width = (P.qi/QI_MAX*100)+'%';
+    const txt = $('qi-text');
     if(txt) txt.textContent = P.qi+'/'+QI_MAX;
+    const w = $('qiWrap');
+    if(w) w.style.display = P.level >= UNLOCK_LV.qi ? '' : 'none';
     const b6 = $('btnSkill6');
     if(b6) b6.classList.toggle('qi-ready', P.qi >= QISTRIKE.qiCost);
   },
@@ -836,16 +993,9 @@ const Battle = {
       const bt = $('boss-hp-text'); if(bt) bt.textContent = E.data.hp+'/'+E.data.maxHp;
     }
     $('player-hp-fill').style.width = (P.hp/P.maxHp*100)+'%';
-    $('player-hp-text').textContent = P.hp+'/'+P.maxHp;
-    $('statGold').textContent = P.gold;
-    $('statCrystal').textContent = P.crystal;
     const tg = $('tGold'); if(tg) tg.textContent = P.gold;
     const tc = $('tCry'); if(tc) tc.textContent = P.crystal;
     const tm = $('tMat'); if(tm) tm.textContent = MAT_ORDER.reduce((s,k)=>s+(P.materials[k]||0),0);
-    $('statMat').innerHTML = MAT_ORDER.map(k=>{
-      const n=P.materials[k]||0;
-      return n>0 ? '<span class="mat-item" style="color:'+MATERIALS[k].color+'">●'+n+'</span>' : '';
-    }).filter(Boolean).join(' ') || '<span class="mat-item zero">●0</span>';
     this.renderExp();
   },
 
@@ -853,16 +1003,11 @@ const Battle = {
   renderExp(){
     const lv = $('ppLv'); if(lv) lv.textContent = 'Lv.'+P.level;
     const fill = $('ppExpFill'); if(!fill) return;
-    const txt = $('ppExpText');
-    if(P.level >= LEVEL_CAP){
+    if(P.level >= levelCap()){
       fill.style.width = '100%';
-      if(txt) txt.textContent = 'MAX';
       return;
     }
-    const need = expForLevel(P.level);
-    const pct = Math.max(0, Math.min(100, Math.floor(P.exp/need*100)));
-    fill.style.width = pct+'%';
-    if(txt) txt.textContent = P.exp+'/'+need;
+    fill.style.width = expProgress().pct+'%';
   },
 
   logPush(str){
@@ -909,6 +1054,7 @@ const Battle = {
     this._respawnTimer && clearTimeout(this._respawnTimer);   // 取消敌人重生/复活排程，防止后台把 active 重新置 true
     this.hideDeathOverlay();                                  // 关闭死亡遮罩并停止倒计时
     if(E.data){ E.casting = false; E.castEndAt = 0; }         // 清敌人读条状态
+    this.hideEnemyCast();
     this.showScreen('screen-zone');
   },
 
@@ -936,9 +1082,14 @@ const Battle = {
     const now = Date.now();
     if(P.casting) return;               // 咏唱中不动作
     if(now < P.pressLockUntil) return;
-    // 非 GCD 插入：剑气满时立即一闪（独立CD好才放；不占公共GCD，不会卡住连招节奏）
-    if(P.level >= UNLOCK_LV.qi && P.qi >= QI_MAX && now >= P.qiCdUntil){
+    // 非 GCD 插入：剑气够放即一闪（0.1s CD，连发由剑气存量驱动）
+    if(P.level >= UNLOCK_LV.qi && P.qi >= QISTRIKE.qiCost && now >= P.qiCdUntil){
       this.onSkillPress('qi', $('btnSkill6')); return;
+    }
+    // 非 GCD 插入：三印齐时先开战意，保证接下来的居合吃到 +20%
+    const sealsFull = P.seals.snow && P.seals.moon && P.seals.hana;
+    if(P.level >= UNLOCK_LV.buff && sealsFull && now >= P.buffCdUntil && now >= P.buffUntil){
+      this.onSkillPress('buff', $('btnSkill7')); return;
     }
     if(now < P.gcdUntil) return;            // 等 GCD
 
@@ -966,7 +1117,7 @@ const Battle = {
         return;
       }
       // 卡死自救：当前缓冲无法继续 → 清空重来
-      P.buf = ''; P.stage[1] = 0; P.stage[2] = 0;
+      P.buf = ''; P.flags = { A:0, B:0, C:0 };
       this.renderButtons();
     }
 

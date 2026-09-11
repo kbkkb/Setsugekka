@@ -18,11 +18,8 @@
   <!-- ===== 顶部 HUD ===== -->
   <div id="hud-top">
     <div class="hud-zone" id="zoneName">—</div>
-    <div class="hud-res">
-      <div class="res-pill"><span class="res-ico ico-gold">◆</span><b id="statGold">0</b></div>
-      <div class="res-pill"><span class="res-ico ico-cry">◆</span><b id="statCrystal">0</b></div>
-      <div class="res-pill mat-pill"><span class="res-ico">◆</span><b id="statMat">0</b></div>
-    </div>
+    <div class="hud-timer" id="hud-timer" style="display:none">⏱ 00:00</div>
+    <button class="hud-help" id="btnHelp" title="游玩提示">?</button>
     <button class="hud-auto" id="btnAuto">⚔ 自动</button>
     <button class="hud-retreat" id="btnRetreat">退出</button>
   </div>
@@ -36,6 +33,7 @@
           <div id="boss-hp-fill" class="hp-fill"></div>
           <span class="hp-num" id="boss-hp-text">0/0</span>
         </div>
+        <div class="ecast-bar" id="enemyCastBar"><div id="enemyCastFill"></div><span id="enemyCastText"></span></div>
       </div>
       <div id="enemy-sprite">
         <div id="enemy-shadow"></div>
@@ -53,40 +51,33 @@
     </div>
   </div>
 
-  <!-- ===== 左下 玩家状态 ===== -->
-  <div id="player-panel">
-    <div class="pp-exp">
-      <div class="lv-badge" id="ppLv">Lv.1</div>
-      <div class="exp-bar pp-expbar"><div class="exp-fill" id="ppExpFill"></div><span id="ppExpText">0/120</span></div>
-    </div>
-    <div class="pp-hp">
-      <div class="hp-icon">❤</div>
-      <div class="hp-bar">
-        <div id="player-hp-fill"></div>
-        <span id="player-hp-text">100/100</span>
-      </div>
-    </div>
-    <div class="pp-qi">
-      <div class="qi-icon">⚡</div>
-      <div class="qi-bar">
-        <div id="qi-fill"></div>
-        <span id="qi-text">0/100</span>
-      </div>
-    </div>
-    <div class="pp-seals">
-      <div class="seal" id="sealSnow">❆</div>
-      <div class="seal" id="sealMoon">☾</div>
-      <div class="seal" id="sealHana">❀</div>
-      <span class="seal-tip" id="sealTip"></span>
-    </div>
-    <div class="pp-buffs">
+  <!-- ===== 玩家状态（居中，技能栏上方）：buff > 生命 > 经验 ===== -->
+  <div id="player-bars">
+    <div class="pb-buffs">
       <span class="buff-chip chip-zs" id="chipZs" style="display:none"></span>
       <span class="buff-chip chip-cd" id="chipCd" style="display:none"></span>
     </div>
+    <div class="pb-hp">
+      <div class="hp-icon">❤</div>
+      <div class="hp-bar"><div id="player-hp-fill"></div></div>
+    </div>
+    <div class="pb-exp">
+      <div class="lv-badge" id="ppLv">Lv.1</div>
+      <div class="exp-bar pb-expbar"><div class="exp-fill" id="ppExpFill"></div></div>
+    </div>
   </div>
 
-  <!-- ===== 战斗记录 ===== -->
-  <div id="combat-log"></div>
+  <!-- ===== 右侧：三印（三角堆叠）+ 剑气槽（解锁后显示） ===== -->
+  <div id="seal-qi-col">
+    <div class="seal-tri">
+      <div class="seal" id="sealSnow">❆</div>
+      <div class="seal" id="sealMoon">☾</div>
+      <div class="seal" id="sealHana">❀</div>
+    </div>
+    <div class="pb-qi" id="qiWrap" style="display:none">
+      <div class="qi-bar"><div id="qi-fill"></div><span id="qi-text">0/100</span></div>
+    </div>
+  </div>
 
   <!-- ===== 死亡遮罩 ===== -->
   <div id="death-overlay">
@@ -116,6 +107,25 @@
       <div class="skill-slot gcd"><button class="skill-btn" id="btnSkill2"><img class="skill-icon" id="icon2" src="img/ico_slash.svg" alt=""><span class="stage-badge" id="badge2">Ⅰ</span><span class="unlock-badge"></span><span class="skill-label" id="label2">突</span><div class="cd-sweep" id="cd2"></div></button></div>
       <div class="skill-slot gcd"><button class="skill-btn" id="btnSkill3"><img class="skill-icon" id="icon3" src="img/ico_slash.svg" alt=""><span class="stage-badge" id="badge3"></span><span class="unlock-badge"></span><span class="skill-label" id="label3">斩落</span><div class="cd-sweep" id="cd3"></div></button></div>
       <div class="skill-slot ult"><button class="skill-btn" id="btnSkill4"><img class="skill-icon" id="icon4" src="img/ico_hana.svg" alt=""><span class="unlock-badge"></span><span class="skill-label">居合</span><div class="cd-sweep" id="cd4"></div></button></div>
+    </div>
+  </div>
+
+  <!-- ===== 新手指南弹窗（仅首场战斗） ===== -->
+  <div id="tut-pop">
+    <div class="tut-box">
+      <div class="tut-title">⚔ 战斗指南</div>
+      <div class="tut-row"><b>1</b><span>「1-1 斩」唯一起手，成功后给连击条件<b class="t-hl">「势」</b>；<b class="t-hl">1-2 / 2-1 / 3-1</b> 都消耗「势」开启各自支线（三选一）</span></div>
+      <div class="tut-combo">
+        <div class="tut-ct">连击条件逐级消耗传递（FF14 式），互不干涉：1-2 给<b class="t-snow">续势</b>、2-1 给<b class="t-moon">锐势</b></div>
+        <div class="tut-route"><span class="tr-seq">1-1斩 →[势] 1-2斩贰 →[续势] 1-3斩叁</span><span class="tr-r t-snow">❆雪印 +锐锋</span></div>
+        <div class="tut-route"><span class="tr-seq">1-1斩 →[势] 2-1突 →[锐势] 2-2扫</span><span class="tr-r t-moon">☾月印 +迅疾</span></div>
+        <div class="tut-route"><span class="tr-seq">1-1斩 →[势] 3-1斩落</span><span class="tr-r t-hana">❀花印 · 最快</span></div>
+      </div>
+      <div class="tut-row"><b>2</b><span>三印（雪❆月☾花❀）集齐 → 金边高亮，释放<b class="t-hl">「居合·雪月花」</b>超大伤害</span></div>
+      <div class="tut-row"><b>3</b><span>居合命中后立刻可接「追斩·残月」</span></div>
+      <div class="tut-row"><b>4</b><span>敌方出现<b class="t-warn">橙色读条</b>时按「格挡」可反制高额伤害</span></div>
+      <div class="tut-row"><b>5</b><span>升级逐步解锁技能与被动；灰色按钮 = 条件未满足</span></div>
+      <button class="btn gold tut-go" id="tutGo">开始战斗</button>
     </div>
   </div>
 </div>
@@ -198,6 +208,8 @@
     <button class="btn fv-btn fv-equip" id="fvEquip"></button>
     <button class="btn fv-btn fv-upg" id="fvUpg"></button>
   </div>
+  <div class="fv-mats" id="forgeMats"></div>
+  <div class="fv-coll" id="forgeColl"></div>
 </div>
 
 <!-- ============================================================ -->

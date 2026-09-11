@@ -3,12 +3,13 @@
    ============================================================ */
 
 // ---------- 存档（localStorage） ----------
-const SAVE_KEY = 'zanji_save_v1';
+const SAVE_KEY = 'zanji_save_v2';
 // 跳过保存标记（删档后阻止 beforeunload 回写）
 let skipSave = false;
 // 只持久化成长数据，战斗内临时状态（HP/GCD/剑气等）不存
 const SAVE_FIELDS = ['maxHp','atk','weapon','exp','level','gold','crystal',
-                     'materials','kills','bossKills','weaponCount','weaponTier'];
+                     'materials','kills','bossKills','weaponCount','weaponTier',
+                     'arenaBest','arenaFirst','collOwn','collMax','tutDone'];
 
 function saveGame(){
   if(skipSave) return;
@@ -98,6 +99,12 @@ function init(){
   // 撤退（返回选关界面并停止战斗）
   $('btnRetreat').onclick = ()=>{ Battle.backToZone(); goScreen('screen-zone','screen-zone'); };
   $('btnAuto').onclick = ()=>Battle.toggleAuto();
+  // 提示按钮：随时重看游玩指南（弹窗打开期间战场暂停）
+  $('btnHelp').onclick = ()=>{
+    const p = $('tut-pop'); if(!p || p.classList.contains('show')) return;
+    if(P.tutDone){ const g = $('tutGo'); if(g) g.textContent = '继续战斗'; }
+    p.classList.add('show');
+  };
 
   // 主页进入讨伐
   $('btnEnter').onclick = ()=>{ renderZonePanel(); goScreen('screen-zone','screen-zone'); };
@@ -175,13 +182,12 @@ function encounterLock(enc){
   if(enc.needKills){
     const need = ENEMIES[enc.needKills].name;
     const cur = P.kills[enc.needKills]||0;
-    if(cur<3) return '需击杀「'+need+'」×'+(3-cur)+'/3';
+    if(cur<3) return '需击杀「'+need+'」'+cur+'/3';
   }
   if(enc.needBoss){
-    const before = ENCOUNTERS.find(x=>x.key===enc.needBoss);
     const bossName = ENEMIES[enc.needBoss].name;
     if((P.bossKills[enc.needBoss]||0)<1){
-      return (before?ENEMIES[before.key].name+'掉落物制造武器后，再击败「'+bossName+'」':' ');
+      return '需击败「'+bossName+'」解锁';
     }
   }
   return null;
@@ -195,7 +201,7 @@ function statLine(){
     const n=P.materials[k]||0;
     return n>0?'<span style="color:'+MATERIALS[k].color+'">'+MATERIALS[k].name+':'+n+'</span>':'';
   }).filter(Boolean).join(' ');
-  return 'Lv.'+P.level+' · 战力 <b>'+atk+'</b> · 武器 <b>'+weaponName()+'</b><br>'+
+  return 'Lv.'+P.level+'/'+levelCap()+' · 战力 <b>'+atk+'</b> · 武器 <b>'+weaponName()+'</b><br>'+
     '◈ '+P.gold+' · '+(mats||'暂无材料')+' · ◆ '+P.crystal;
 }
 
@@ -213,17 +219,21 @@ function renderZonePanel(){
     sec.className = 'zone-sec';
     const head = document.createElement('div');
     head.className = 'zone-head';
-    head.innerHTML = '<span class="zh-arrow">▸</span><span class="zh-name">'+g.zone+'</span>';
+    head.textContent = '—— '+g.zone+' ——';
     const body = document.createElement('div');
-    body.className = 'zone-sec-body'+(i===0? ' open':'');
+    body.className = 'zone-sec-body';
     g.items.forEach(enc=>{
-      const e = ENEMIES[enc.key];
+      const isArena = enc.kind==='arena';
+      const e = isArena ? { name:'四王连战 · 剑心试炼场' } : ENEMIES[enc.key];
       const lock = encounterLock(enc);
       const card = document.createElement('div');
       card.className = 'zone-card'+(lock?' locked':'');
       const extra = enc.kind==='boss'
         ? ' · <span style="color:var(--crystal)">首领</span>'+(enc.recAtk? '推荐战力>'+enc.recAtk : '')
-        : '';
+        : (isArena ? ' · <span style="color:var(--crystal)">觉醒四王</span>'+(enc.recAtk? '推荐战力>'+enc.recAtk : '') : '');
+      const kindTxt = isArena
+        ? '连战计时'+(P.arenaBest? ' · 最佳 '+fmtTime(P.arenaBest) : '')+(P.arenaFirst? ' · 首通✓' : ' · 首通奖◆'+ARENA_FIRST_REWARD)
+        : (enc.kind==='boss'?'首领战':'刷怪');
       let autoLine = '';
       if(autoUnlocked() && !lock){
         const n = (P.kills[enc.key]||0) + (P.bossKills[enc.key]||0);
@@ -232,16 +242,12 @@ function renderZonePanel(){
           : '<div class="z-auto">自动·需击杀 '+(10-n)+'/10</div>';
       }
       card.innerHTML = '<div class="z-name">'+e.name+'</div>'+
-        '<div class="z-info">'+(enc.kind==='boss'?'首领战':'刷怪')+extra+'</div>'+
+        '<div class="z-info">'+kindTxt+extra+'</div>'+
         (lock? '<div class="z-lock">🔒 '+lock+'</div>' : '')+
         autoLine;
       card.onclick = ()=> enterGuard(enc, lock);
       body.appendChild(card);
     });
-    head.onclick = ()=>{
-      const open = body.classList.toggle('open');
-      head.querySelector('.zh-arrow').textContent = open? '▾' : '▸';
-    };
     sec.appendChild(head); sec.appendChild(body);
     zoneList.appendChild(sec);
   });
@@ -254,7 +260,12 @@ function enterGuard(enc, lock){
 // ---------- 经验书 ----------
 function addExp(n){
   P.exp += n;
-  while(P.exp >= expForLevel(P.level) && P.level < LEVEL_CAP){ P.level++; P.atk += 3; P.maxHp += 15; }
+  const oldLv = P.level;
+  while(P.exp >= expForLevel(P.level) && P.level < levelCap()){ P.level++; P.atk += 3; P.maxHp += 15; }
+  if(P.level > oldLv){
+    const u = unlockNames(oldLv, P.level);
+    if(u.length) toast('🆕 '+u.join(' / '));
+  }
   saveGame();
 }
 
@@ -273,7 +284,7 @@ function renderShop(){
     head.textContent = '—— '+SHOP_HEAD[cat]+' ——';
     list.appendChild(head);
 SHOP[cat].forEach(item=>{
-      const eff = cat==='gold' ? '获得金币 +'+item.qty : '获得经验 +'+item.qty;
+      const eff = cat==='gold' ? '获得金币 +'+item.qty : '获得经验 +'+expBookGain(item)+'（'+item.books+'本 × 单级20%）';
       const div = document.createElement('div');
       div.className = 'shop-item';
       div.innerHTML =
@@ -290,7 +301,7 @@ function buyShop(cat, item){
   if(P.crystal < item.cost){ toast('钻石不足：需 ◆'+item.cost); return; }
   P.crystal -= item.cost;
   if(cat==='gold'){ P.gold += item.qty; toast('购买 '+item.name+' 成功！'); }
-  else if(cat==='exp'){ addExp(item.qty); toast('阅读 '+item.name+'！'); }
+  else if(cat==='exp'){ const q = expBookGain(item); addExp(q); toast('阅读 '+item.name+'：经验 +'+q); }
   saveGame();
   renderShop();
   renderCurrency();
@@ -304,13 +315,18 @@ function weaponName(){
 // ---------- 角色（状态总览） ----------
 function renderChar(){
   const w = WEAPONS.find(x=>x.id===P.weapon);
-  const expNeed = expForLevel(P.level);
-  const pct = Math.max(0, Math.min(100, Math.floor(P.exp/expNeed*100)));
+  const cap = levelCap();
+  const atCap = P.level >= cap;
+  const pg = expProgress();
+  const pct = atCap ? 100 : pg.pct;
+  const expLine = atCap
+    ? (cap>=LEVEL_CAP ? '经验 MAX · 已达满级' : '经验已积攒 '+P.exp+' · 等级上限 '+cap+'，击败本区域首领解锁')
+    : '经验 '+pg.cur+' / '+pg.span+'（'+pg.pct+'%）';
   const res = MAT_ORDER.map(k=>'<span style="color:'+MATERIALS[k].color+'">'+MATERIALS[k].name+' '+ (P.materials[k]||0)+'</span>').join(' ');
   $('charStats').innerHTML =
     '<div class="lv-line">Lv.<b>'+P.level+'</b></div>'+
     '<div class="exp-bar"><div class="exp-fill" style="width:'+pct+'%"></div></div>'+
-    '<div class="exp-line">经验 '+P.exp+' / '+expNeed+'（'+pct+'%）</div>'+
+    '<div class="exp-line">'+expLine+'</div>'+
     '<div class="stat-line">生命 <b>'+P.maxHp+'</b> · 攻击 <b>'+(P.atk+weaponAtk(w.id))+'</b>（武器+'+weaponAtk(w.id)+'）</div>'+
     '<div class="stat-line">◈ 金币 '+P.gold+' · '+res+'</div>';
   // 更换武器按钮（打开二级弹窗）
@@ -360,39 +376,56 @@ function renderCharSkills(){
   const pct = m => Math.round(m*10)+'%';
   const chiTxt = m => pct(m)+'（有「势」'+pct(Math.round(m*(1+CHI_BONUS)))+'）';
   const chip = (on,lv)=>'<span class="sk-chip'+(on?' on':' off')+'">'+(on? '已解锁' : 'Lv.'+lv+' 解锁')+'</span>';
-  // 技能条目：图标 / 名称 / 解锁徽章 / 效果描述
-  const card = (icon, hue,name,effect,on,lv)=>'<div class="sk-item'+(on?' on':' off')+'">'+
+  // 技能条目：图标 / 名称 / 解锁徽章 / 效果描述（被动带紫色标记）
+  const card = (icon, hue,name,effect,on,lv,psv)=>'<div class="sk-item'+(on?' on':' off')+(psv?' psv':'')+'">'+
     '<div class="sk-ico" style="filter:hue-rotate('+hue+'deg)"><img src="'+icon+'" alt=""></div>'+
     '<div class="sk-body"><div class="sk-head">'+name+chip(on,lv)+'</div>'+
     '<div class="sk-eff">'+effect+'</div></div></div>';
-  // 合并连招拆分为独立段显示（斩三段 / 突两段）
   const rows = [];
   const lv1 = UNLOCK_LV.b1, lv2 = UNLOCK_LV.b2, lv3 = UNLOCK_LV.b3;
-  // —— 斩三段 ——
+  const flagName = { A:'势', B:'续势', C:'锐势' };
+  // —— 1-x 连击 flag 链 ——
   BTN1.forEach((s,i)=>{
-    rows.push(card('img/ico_slash.svg',0,'斩 · 段'+(i+1)+' · '+s.name,
-      '造成 '+chiTxt(s.mult)+' 伤害（GCD '+GCD_MS/1000+'s）'+(s.needChi? ' · 需「势」' : ' · 起手获「势」'+CHI_MS/1000+'s')+
-      (i===2? ' · 雪❆印+剑气+'+QI_PER_SEAL+' · 锐锋+15%' : ''), P.level>=lv1, lv1));
+    const cond = i===0 ? '唯一起手 · 无需条件' : '需连击条件「'+flagName[s.req]+'」（消耗）';
+    const give = i===0 ? ' · 成功后给「势」→ 可续 1-2 / 2-1 / 3-1' :
+                 i===1 ? ' · 成功后给「续势」→ 可续 1-3' : ' · 收招凝聚雪❆印 · 锐锋+15%';
+    rows.push(card('img/ico_slash.svg',0,'1-'+(i+1)+' '+s.name,
+      cond+' · 造成 '+pct(s.mult)+' 伤害'+give+' · GCD '+GCD_MS/1000+'s · 30%暴击', P.level>=lv1, lv1));
   });
-  // —— 突两段 ——
   BTN2.forEach((s,i)=>{
-    rows.push(card('img/ico_slash.svg',40,'突 · 段'+(i+1)+' · '+s.name,
-      '造成 '+chiTxt(s.mult)+' 伤害（GCD '+GCD_MS/1000+'s · 需「势」）'+(i===1? ' · 月☾印+剑气+'+QI_PER_SEAL+' · 迅疾GCD-10%' : ''), P.level>=lv2, lv2));
+    const give = i===0? ' · 成功后给「锐势」→ 可续 2-2' : ' · 收招凝聚月☾印 · 迅疾GCD-10%';
+    rows.push(card('img/ico_slash.svg',40,(i===0?'2-1 突':'2-2 扫'),
+      '需连击条件「'+flagName[s.req]+'」（消耗） · 造成 '+pct(s.mult)+' 伤害'+give+' · GCD '+GCD_MS/1000+'s · 30%暴击', P.level>=lv2, lv2));
   });
-  // —— 斩落 ——
-  rows.push(card('img/ico_slash.svg',80,'斩落',
-    '造成 '+chiTxt(BTN3.mult)+' 伤害（GCD '+GCD_MS/1000+'s · 需「势」）· 花❀印+剑气+'+QI_PER_SEAL, P.level>=lv3, lv3));
-  // —— 格挡 / 居合 / 剑气一闪 / 战意高扬 / 追斩 ——
-  rows.push(card('img/ico_shield.svg',0,'格挡',
-    '持续 '+SHIELD.duration/1000+'s：受到伤害降低70% · 独立CD '+SHIELD.cd/1000+'s（不占GCD）· 成功减伤剑气+'+QI_PER_BLOCK, P.level>=UNLOCK_LV.shield, UNLOCK_LV.shield));
-  rows.push(card('img/ico_hana.svg',0,ULT.name,
-    '咏唱 '+ULT.castMs/1000+'s 后造成 攻击力×'+pct(ULT.dmgBase)+'（冷却自咏唱起 '+ULT.gcdMs/1000+'s）· 命中解锁追斩', P.level>=UNLOCK_LV.ult, UNLOCK_LV.ult));
-  rows.push(card('img/ico_snow.svg',0,QISTRIKE.name,
-    '剑气≥'+QISTRIKE.qiCost+' · 造成 攻击力×'+pct(QISTRIKE.dmgBase)+'（瞬发 · 独立CD '+QISTRIKE.cd/1000+'s · 不占GCD）', P.level>=UNLOCK_LV.qi, UNLOCK_LV.qi));
-  rows.push(card('img/ico_hana.svg',40,WARCRY.name,
-    '持续 '+WARCRY.durMs/1000+'s：伤害+'+Math.round((WARCRY.dmgMul-1)*100)+'% · 独立CD '+WARCRY.cd/1000+'s（不占GCD）', P.level>=UNLOCK_LV.buff, UNLOCK_LV.buff));
-  rows.push(card('img/ico_moon.svg',0,FOLLOW.name,
-    '居合后释放 · 造成 攻击力×'+pct(FOLLOW.dmgBase)+'（GCD '+FOLLOW.gcdMs/1000+'s · 不中断连段）', P.level>=UNLOCK_LV.follow, UNLOCK_LV.follow));
+  rows.push(card('img/ico_slash.svg',80,'3-1 斩落',
+    '需连击条件「'+flagName[BTN3.req]+'」（消耗） · 造成 '+pct(BTN3.mult)+' 伤害 · 收招凝聚花❀印 · 最短成印路线 · GCD '+GCD_MS/1000+'s · 30%暴击', P.level>=lv3, lv3));
+  // —— 按等级排序的主动/被动条目 ——
+  const entries = [
+    { k:'shield',  ico:'img/ico_shield.svg', hue:0,
+      eff:'持续 '+SHIELD.duration/1000+'s：受到伤害降低70% · 独立CD '+SHIELD.cd/1000+'s · 可反制敌方读条' },
+    { k:'ult',     ico:'img/ico_hana.svg', hue:0, crit:1,
+      eff:'咏唱 '+ULT.castMs/1000+'s 后造成 攻击力×'+pct(ULT.dmgBase)+'（冷却自咏唱起 '+ULT.gcdMs/1000+'s）· 命中解锁追斩' },
+    { k:'atkUp1',  ico:'img/ico_slash.svg', hue:90 },
+    { k:'qi',      ico:'img/ico_snow.svg', hue:0, crit:1,
+      eff:'剑气≥'+QISTRIKE.qiCost+' · 造成 攻击力×'+pct(QISTRIKE.dmgBase)+'（瞬发 · 独立CD '+QISTRIKE.cd/1000+'s · 不占GCD）' },
+    { k:'qiSrc',   ico:'img/ico_snow.svg', hue:120 },
+    { k:'leech1',  ico:'img/ico_slash.svg', hue:150 },
+    { k:'buff',    ico:'img/ico_hana.svg', hue:40,
+      eff:'基础8s（Lv40被动→10s）：伤害+'+Math.round((WARCRY.dmgMul-1)*100)+'% · 独立CD '+WARCRY.cd/1000+'s' },
+    { k:'follow',  ico:'img/ico_moon.svg', hue:0, crit:1,
+      eff:'居合后释放 · 造成 攻击力×'+pct(FOLLOW.dmgBase)+'（GCD '+FOLLOW.gcdMs/1000+'s · 不中断连段）' },
+    { k:'shieldCd',ico:'img/ico_shield.svg', hue:60 },
+    { k:'atkUp2',  ico:'img/ico_slash.svg', hue:210 },
+    { k:'buffDur', ico:'img/ico_hana.svg', hue:240 },
+    { k:'specUp',  ico:'img/ico_hana.svg', hue:270 },
+    { k:'leech2',  ico:'img/ico_slash.svg', hue:300 }
+  ];
+  entries.forEach(en=>{
+    const info = UNLOCK_INFO[en.k], lv = UNLOCK_LV[en.k];
+    const eff = en.eff || info.d;
+    const isPsv = info.n.indexOf('被动') === 0;
+    rows.push(card(en.ico, en.hue, info.n, eff + (en.crit? ' · 30%暴击' : ''), P.level>=lv, lv, isPsv));
+  });
   box.innerHTML = rows.join('');
 }// ---------- 锻造（武器查看器·轮播） ----------
 let forgeIdx = 0, forgeStartX = null;
@@ -404,6 +437,36 @@ function renderForge(){
   const eqIdx = WEAPONS.findIndex(w=>w.id===P.weapon);
   if(eqIdx >= 0) forgeIdx = eqIdx;
   renderForgeView();
+  renderForgeMats();
+  renderCollection();
+}
+
+// 武器图鉴：收集全部 / 全部满阶，达成自动发钻石
+function renderCollection(){
+  const box = $('forgeColl'); if(!box) return;
+  const all = WEAPONS.length;
+  const ownedN = WEAPONS.filter(w=>isWeaponOwned(w.id)).length;
+  const maxN = WEAPONS.filter(w=>isWeaponOwned(w.id) && tierOf(w.id)>=TIER_MAX).length;
+  if(ownedN>=all && !P.collOwn){
+    P.collOwn = true; P.crystal += COLL_OWN_REWARD; saveGame(); renderCurrency();
+    toast('📖 图鉴达成：集齐全部武器 ◆+'+COLL_OWN_REWARD);
+  }
+  if(maxN>=all && !P.collMax){
+    P.collMax = true; P.crystal += COLL_MAX_REWARD; saveGame(); renderCurrency();
+    toast('👑 图鉴达成：全部武器满阶 ◆+'+COLL_MAX_REWARD);
+  }
+  box.innerHTML = '<span class="fc-label">📖 武器图鉴</span>'+
+    '<span class="fc-chip'+(P.collOwn?' got':'')+'">收集 '+ownedN+'/'+all+(P.collOwn?' ✓已领':' ·◆'+COLL_OWN_REWARD)+'</span>'+
+    '<span class="fc-chip'+(P.collMax?' got':'')+'">满阶 '+maxN+'/'+all+(P.collMax?' ✓已领':' ·◆'+COLL_MAX_REWARD)+'</span>';
+}
+
+// 材料总览条：显示全部材料与数量（为 0 也显示，置灰）
+function renderForgeMats(){
+  const box = $('forgeMats'); if(!box) return;
+  box.innerHTML = MAT_ORDER.map(k=>{
+    const n = P.materials[k]||0;
+    return '<span class="fm'+(n>0?'':' none')+'"><span class="fm-ico" style="color:'+MATERIALS[k].color+'">◆</span>'+MATERIALS[k].name+' <b>'+n+'</b></span>';
+  }).join('');
 }
 
 function renderForgeView(){
@@ -495,7 +558,7 @@ function isWeaponOwned(id){ return (P.weaponCount[id]||0) > 0; }
 function costText(wp){
   const parts = [];
   if(wp.cost.gold) parts.push('◈'+wp.cost.gold);
-  ['iron','bone','crystal','soul'].forEach(k=>{
+  MAT_ORDER.forEach(k=>{
     if(wp.cost[k]){ const m=MATERIALS[k]; parts.push('<span style="color:'+m.color+'">'+m.name+'×'+wp.cost[k]+'</span>'); }
   });
   return parts.join(' ');
@@ -503,7 +566,7 @@ function costText(wp){
 function costHtml(wp){
   const owned = MaterialOwnCounts();
   const okGold = wp.cost.gold===undefined || P.gold>=wp.cost.gold;
-  const okMats = ['iron','bone','crystal','soul'].every(k=> !wp.cost[k] || (P.materials[k]||0)>=wp.cost[k]);
+  const okMats = MAT_ORDER.every(k=> !wp.cost[k] || (P.materials[k]||0)>=wp.cost[k]);
   const text = costText(wp);
   return (okGold&&okMats)
     ? '<span style="color:var(--green)">可锻造</span>'
@@ -514,7 +577,7 @@ function MaterialOwnCounts(){ return P.materials; }
 function canAfford(wp){
   if(!wp.cost) return true;
   if(wp.cost.gold && P.gold<wp.cost.gold) return false;
-  return ['iron','bone','crystal','soul'].every(k=> !wp.cost[k] || (P.materials[k]||0)>=wp.cost[k]);
+  return MAT_ORDER.every(k=> !wp.cost[k] || (P.materials[k]||0)>=wp.cost[k]);
 }
 function disabled(wp){
   // 初始武器可装备；锻造需材料，但可预览
@@ -525,7 +588,7 @@ function disabled(wp){
 function forgeCopy(wp){
   if(!canAfford(wp)){ toast('材料不足：'+costText(wp).replace(/<[^>]+>/g,'')); return; }
   if(wp.cost.gold) P.gold -= wp.cost.gold;
-  ['iron','bone','crystal','soul'].forEach(k=>{ if(wp.cost[k]) P.materials[k]-=wp.cost[k]; });
+  MAT_ORDER.forEach(k=>{ if(wp.cost[k]) P.materials[k]-=wp.cost[k]; });
   P.weaponCount[wp.id]=(P.weaponCount[wp.id]||1)+1;
   toast('锻造 '+wp.name+' 复制品×1！');
   saveGame(); renderChar(); renderForge();
@@ -540,7 +603,7 @@ function forgeOrEquip(wp){
   if(isWeaponOwned(wp.id)){
     if(canAfford(wp) && wp.cost){
       if(wp.cost.gold) P.gold -= wp.cost.gold;
-      ['iron','bone','crystal','soul'].forEach(k=>{ if(wp.cost[k]) P.materials[k]-=wp.cost[k]; });
+      MAT_ORDER.forEach(k=>{ if(wp.cost[k]) P.materials[k]-=wp.cost[k]; });
       P.weaponCount[wp.id] = (P.weaponCount[wp.id]||1)+1;
       toast('锻造 '+wp.name+' 复制品×1！可用于升阶');
       saveGame(); renderChar(); renderForge(); return;
@@ -553,7 +616,7 @@ function forgeOrEquip(wp){
   if(!canAfford(wp)){ toast('材料不足：'+costText(wp).replace(/<[^>]+>/g,'')); return; }
   // 消耗
   if(wp.cost.gold) P.gold -= wp.cost.gold;
-  ['iron','bone','crystal','soul'].forEach(k=>{ if(wp.cost[k]) P.materials[k]-=wp.cost[k]; });
+  MAT_ORDER.forEach(k=>{ if(wp.cost[k]) P.materials[k]-=wp.cost[k]; });
   P.weaponCount[wp.id] = (P.weaponCount[wp.id]||0) + 1;
   P.weapon = wp.id;
   toast('锻造并装备 '+wp.name+'！');
